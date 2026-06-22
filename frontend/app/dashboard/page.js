@@ -48,6 +48,8 @@ export default function DatabaseListPage() {
   const [selectedQuickTables, setSelectedQuickTables] = useState(["admin", "login_activity", "query_logger"]);
   const [activeTab, setActiveTab] = useState("mysql");
   const router = useRouter();
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [dbToDelete, setDbToDelete] = useState("");
   const [dbTypeStep, setDbTypeStep] = useState("select");
   const [isAiBuilderOpen, setIsAiBuilderOpen] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("create table users with column name, email, password");
@@ -134,31 +136,36 @@ export default function DatabaseListPage() {
       fetchDatabases(user);
     }
   }, []);
-  const handleDeleteDatabase = async (dbId) => {
-    if (confirm("Are you sure you want to delete this database?")) {
+  const confirmDeleteDatabase = (dbId) => {
+    setDbToDelete(dbId);
+    setIsDeleteModalOpen(true);
+  };
+  const handleDeleteDatabase = async () => {
+    if (!dbToDelete) return;
+    try {
+      const res = await fetch("/api/database/delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dbName: dbToDelete, username: currentUser })
+      });
+      const responseText = await res.text();
+      let data;
       try {
-        const res = await fetch("/api/database/delete", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dbName: dbId, username: currentUser })
-        });
-        const responseText = await res.text();
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch (err) {
-          console.error("Non-JSON response for database deletion:", responseText);
-          alert(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`);
-          return;
-        }
-        if (res.ok && data.success) {
-          await fetchDatabases(currentUser);
-        } else {
-          alert(data.error || "Failed to delete database");
-        }
+        data = JSON.parse(responseText);
       } catch (err) {
-        console.error(err);
+        console.error("Non-JSON response for database deletion:", responseText);
+        alert(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`);
+        return;
       }
+      if (res.ok && data.success) {
+        await fetchDatabases(currentUser);
+        setIsDeleteModalOpen(false);
+        setDbToDelete("");
+      } else {
+        alert(data.error || "Failed to delete database");
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
   const handleSaveDatabase = async (e) => {
@@ -349,7 +356,7 @@ export default function DatabaseListPage() {
                             <button style={actBtnStyle("#f59e0b")} title={activeTab === "mongodb" ? "View Collections" : "View Tables"} onClick={() => router.push(`/dashboard/db/${db.name}`)}>
                               <DatabaseIcon />
                             </button>
-                            <button style={actBtnStyle("#ef4444")} title="Delete Database" onClick={() => handleDeleteDatabase(db.id)}>
+                            <button style={actBtnStyle("#ef4444")} title="Delete Database" onClick={() => confirmDeleteDatabase(db.id)}>
                               <TrashIcon />
                             </button>
                           </div>
@@ -613,6 +620,45 @@ export default function DatabaseListPage() {
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", padding: "14px 20px", borderTop: "1px solid #e2e8f0" }}>
               <button onClick={() => setIsAiBuilderOpen(false)} style={{ padding: "8px 16px", borderRadius: "6px", border: "1px solid #cbd5e1", backgroundColor: "transparent", color: "#475569", cursor: "pointer", fontSize: "13px" }}>Close</button>
+            </div>
+          </div>
+        </div>}
+
+      {/* ==================== MODAL: DELETE DATABASE CONFIRMATION ==================== */}
+      {isDeleteModalOpen && <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(15, 23, 42, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1e3 }}>
+          <div style={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "12px", width: "450px", maxWidth: "90vw", boxShadow: "var(--shadow-lg)", overflow: "hidden" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "30px 24px", textAlign: "center" }}>
+              <div style={{ width: "56px", height: "56px", borderRadius: "50%", backgroundColor: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", color: "#ef4444", marginBottom: "20px" }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <h3 style={{ margin: "0 0 8px 0", fontSize: "18px", fontWeight: "bold", color: "var(--text-primary)" }}>Delete Database</h3>
+              <p style={{ margin: 0, fontSize: "14px", color: "var(--text-muted)", lineHeight: "1.5" }}>
+                Are you sure you want to delete the database <strong style={{ color: "var(--text-primary)" }}>{dbToDelete.startsWith("mongodb:") ? dbToDelete.replace("mongodb:", "") : dbToDelete}</strong>? This action is permanent and all tables/data inside it will be lost forever.
+              </p>
+            </div>
+            
+            <div style={{ display: "flex", borderTop: "1px solid var(--border-color)", backgroundColor: "var(--bg-tertiary)" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDbToDelete("");
+                }}
+                style={{ flex: 1, padding: "16px", background: "none", border: "none", borderRight: "1px solid var(--border-color)", cursor: "pointer", fontSize: "14px", fontWeight: "600", color: "var(--text-secondary)", outline: "none" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteDatabase}
+                style={{ flex: 1, padding: "16px", background: "none", border: "none", cursor: "pointer", fontSize: "14px", fontWeight: "bold", color: "#ef4444", outline: "none" }}
+              >
+                Delete Database
+              </button>
             </div>
           </div>
         </div>}

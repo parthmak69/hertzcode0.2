@@ -12,6 +12,8 @@ export default function CrudProjectsListPage() {
   const [connectFolder, setConnectFolder] = useState("lib");
   const [userDatabases, setUserDatabases] = useState([]);
   const router = useRouter();
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState(null);
   useEffect(() => {
     const stored = localStorage.getItem("crudProjects");
     if (stored) {
@@ -57,11 +59,16 @@ export default function CrudProjectsListPage() {
     setDatabaseName("");
     setConnectFolder("lib");
   };
-  const handleDeleteProject = (id, name) => {
-    if (confirm(`Are you sure you want to delete the CRUD project "${name}"?`)) {
-      const updated = projects.filter((p) => p.id !== id);
-      saveProjects(updated);
-    }
+  const confirmDeleteProject = (id, name) => {
+    setProjectToDelete({ id, name });
+    setIsDeleteModalOpen(true);
+  };
+  const handleDeleteProject = () => {
+    if (!projectToDelete) return;
+    const updated = projects.filter((p) => p.id !== projectToDelete.id);
+    saveProjects(updated);
+    setIsDeleteModalOpen(false);
+    setProjectToDelete(null);
   };
   return <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       
@@ -114,7 +121,7 @@ export default function CrudProjectsListPage() {
               </thead>
               <tbody>
                 {projects.length === 0 ? <tr>
-                    <td colSpan={5} style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>No CRUD projects found. Click "Create Project" to start!</td>
+                    <td colSpan={5} style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>No CRUD projects found. Click &quot;Create Project&quot; to start!</td>
                   </tr> : projects.filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase())).map((p, idx) => <tr key={p.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
                         <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{idx + 1}</td>
                         <td style={{ padding: "14px 16px" }}>
@@ -139,7 +146,7 @@ export default function CrudProjectsListPage() {
                               </svg>
                             </button>
                             <button
-    onClick={() => handleDeleteProject(p.id, p.name)}
+    onClick={() => confirmDeleteProject(p.id, p.name)}
     style={{ border: "none", background: "none", cursor: "pointer", padding: "6px", color: "#ef4444", display: "inline-flex", alignItems: "center" }}
     title="Delete Project"
   >
@@ -227,6 +234,45 @@ export default function CrudProjectsListPage() {
                 <button type="submit" style={{ padding: "8px 16px", borderRadius: "6px", border: "none", backgroundColor: "#3b82f6", color: "white", cursor: "pointer", fontSize: "14px", fontWeight: "bold" }}>Create Project</button>
               </div>
             </form>
+          </div>
+        </div>}
+
+      {/* ==================== MODAL: DELETE PROJECT CONFIRMATION ==================== */}
+      {isDeleteModalOpen && projectToDelete && <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(15, 23, 42, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1e3 }}>
+          <div style={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "12px", width: "450px", maxWidth: "90vw", boxShadow: "var(--shadow-lg)", overflow: "hidden" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "30px 24px", textAlign: "center" }}>
+              <div style={{ width: "56px", height: "56px", borderRadius: "50%", backgroundColor: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", color: "#ef4444", marginBottom: "20px" }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <h3 style={{ margin: "0 0 8px 0", fontSize: "18px", fontWeight: "bold", color: "var(--text-primary)" }}>Delete CRUD Project</h3>
+              <p style={{ margin: 0, fontSize: "14px", color: "var(--text-muted)", lineHeight: "1.5" }}>
+                Are you sure you want to delete the CRUD project <strong style={{ color: "var(--text-primary)" }}>{projectToDelete.name}</strong>? This action is permanent and all files and configurations inside it will be lost forever.
+              </p>
+            </div>
+            
+            <div style={{ display: "flex", borderTop: "1px solid var(--border-color)", backgroundColor: "var(--bg-tertiary)" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setProjectToDelete(null);
+                }}
+                style={{ flex: 1, padding: "16px", background: "none", border: "none", borderRight: "1px solid var(--border-color)", cursor: "pointer", fontSize: "14px", fontWeight: "600", color: "var(--text-secondary)", outline: "none" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteProject}
+                style={{ flex: 1, padding: "16px", background: "none", border: "none", cursor: "pointer", fontSize: "14px", fontWeight: "bold", color: "#ef4444", outline: "none" }}
+              >
+                Delete Project
+              </button>
+            </div>
           </div>
         </div>}
 

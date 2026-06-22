@@ -14,6 +14,21 @@ export default function CrudFilesListPage() {
   const [tableName, setTableName] = useState("");
   const [availableTables, setAvailableTables] = useState([]);
   const [selectedImportTable, setSelectedImportTable] = useState("");
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState(null);
+  const fetchAvailableTables = async (dbName) => {
+    try {
+      const res = await fetch(`/api/database/tables?dbName=${encodeURIComponent(dbName)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.tables) {
+          setAvailableTables(data.tables.map((t) => t.name));
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch tables for import:", err);
+    }
+  };
   useEffect(() => {
     const stored = localStorage.getItem("crudProjects");
     if (stored) {
@@ -32,19 +47,6 @@ export default function CrudFilesListPage() {
       }
     }
   }, [projectId]);
-  const fetchAvailableTables = async (dbName) => {
-    try {
-      const res = await fetch(`/api/database/tables?dbName=${encodeURIComponent(dbName)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.tables) {
-          setAvailableTables(data.tables.map((t) => t.name));
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch tables for import:", err);
-    }
-  };
   const handleCreateFile = async (e) => {
     e.preventDefault();
     if (!project || !fileName.trim()) return;
@@ -122,16 +124,20 @@ export default function CrudFilesListPage() {
     setTableName("");
     setSelectedImportTable("");
   };
-  const handleDeleteFile = (fileId, name) => {
-    if (!project) return;
-    if (confirm(`Are you sure you want to delete the file "${name}"?`)) {
-      const updatedFiles = project.files.filter((f) => f.id !== fileId);
-      const updatedProject = { ...project, files: updatedFiles };
-      const updatedProjectsList = allProjects.map((p) => p.id === projectId ? updatedProject : p);
-      setProject(updatedProject);
-      setAllProjects(updatedProjectsList);
-      localStorage.setItem("crudProjects", JSON.stringify(updatedProjectsList));
-    }
+  const confirmDeleteFile = (fileId, name) => {
+    setFileToDelete({ id: fileId, name });
+    setIsDeleteModalOpen(true);
+  };
+  const handleDeleteFile = () => {
+    if (!project || !fileToDelete) return;
+    const updatedFiles = project.files.filter((f) => f.id !== fileToDelete.id);
+    const updatedProject = { ...project, files: updatedFiles };
+    const updatedProjectsList = allProjects.map((p) => p.id === projectId ? updatedProject : p);
+    setProject(updatedProject);
+    setAllProjects(updatedProjectsList);
+    localStorage.setItem("crudProjects", JSON.stringify(updatedProjectsList));
+    setIsDeleteModalOpen(false);
+    setFileToDelete(null);
   };
   if (!project) {
     return <div style={{ padding: "24px", color: "var(--text-primary)" }}>Loading project details...</div>;
@@ -159,7 +165,7 @@ export default function CrudFilesListPage() {
           </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color)", paddingBottom: "16px", marginBottom: "20px" }}>
-            <h2 style={{ fontSize: "20px", fontWeight: "bold", color: "var(--text-primary)" }}>Files in project "{project.name}":</h2>
+            <h2 style={{ fontSize: "20px", fontWeight: "bold", color: "var(--text-primary)" }}>Files in project &quot;{project.name}&quot;:</h2>
             <div style={{ display: "flex", gap: "10px" }}>
               <button
     onClick={() => window.open(`/dashboard/crud/${projectId}/admin-portal/login`, "_blank")}
@@ -203,7 +209,7 @@ export default function CrudFilesListPage() {
               <tbody>
                 {!project.files || project.files.length === 0 ? <tr>
                     <td colSpan={5} style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>
-                      No files created yet. Click "Add CRUD File" to start!
+                      No files created yet. Click &quot;Add CRUD File&quot; to start!
                     </td>
                   </tr> : project.files.filter((file) => file.name.toLowerCase().includes(searchQuery.toLowerCase())).map((file, idx) => <tr key={file.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
                         <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{idx + 1}</td>
@@ -237,12 +243,12 @@ export default function CrudFilesListPage() {
   >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                 <circle cx="12" cy="12" r="3" />
-                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                               </svg>
                               Build UI
                             </button>
-                            <button
-    onClick={() => handleDeleteFile(file.id, file.name)}
+                             <button
+    onClick={() => confirmDeleteFile(file.id, file.name)}
     style={{ border: "none", background: "none", cursor: "pointer", padding: "6px", color: "#ef4444", display: "inline-flex", alignItems: "center" }}
     title="Delete File"
   >
@@ -326,6 +332,45 @@ export default function CrudFilesListPage() {
                 <button type="submit" style={{ padding: "8px 16px", borderRadius: "6px", border: "none", backgroundColor: "#3b82f6", color: "white", cursor: "pointer", fontSize: "14px", fontWeight: "bold" }}>Create File</button>
               </div>
             </form>
+          </div>
+        </div>}
+
+      {/* ==================== MODAL: DELETE FILE CONFIRMATION ==================== */}
+      {isDeleteModalOpen && fileToDelete && <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(15, 23, 42, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1e3 }}>
+          <div style={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "12px", width: "450px", maxWidth: "90vw", boxShadow: "var(--shadow-lg)", overflow: "hidden" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "30px 24px", textAlign: "center" }}>
+              <div style={{ width: "56px", height: "56px", borderRadius: "50%", backgroundColor: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", color: "#ef4444", marginBottom: "20px" }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <h3 style={{ margin: "0 0 8px 0", fontSize: "18px", fontWeight: "bold", color: "var(--text-primary)" }}>Delete CRUD File</h3>
+              <p style={{ margin: 0, fontSize: "14px", color: "var(--text-muted)", lineHeight: "1.5" }}>
+                Are you sure you want to delete the CRUD file <strong style={{ color: "var(--text-primary)" }}>{fileToDelete.name}</strong>? This action is permanent and all configurations for this file will be lost forever.
+              </p>
+            </div>
+            
+            <div style={{ display: "flex", borderTop: "1px solid var(--border-color)", backgroundColor: "var(--bg-tertiary)" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setFileToDelete(null);
+                }}
+                style={{ flex: 1, padding: "16px", background: "none", border: "none", borderRight: "1px solid var(--border-color)", cursor: "pointer", fontSize: "14px", fontWeight: "600", color: "var(--text-secondary)", outline: "none" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteFile}
+                style={{ flex: 1, padding: "16px", background: "none", border: "none", cursor: "pointer", fontSize: "14px", fontWeight: "bold", color: "#ef4444", outline: "none" }}
+              >
+                Delete File
+              </button>
+            </div>
           </div>
         </div>}
 

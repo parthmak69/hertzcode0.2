@@ -29,6 +29,8 @@ export default function TablesListPage() {
   const [aiPrompt, setAiPrompt] = useState("create table users with column name, email, password");
   const [aiGeneratedSql, setAiGeneratedSql] = useState("");
   const [newTableName, setNewTableName] = useState("");
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [tableToDelete, setTableToDelete] = useState("");
   const filteredTables = tables.filter((t) => t.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, entriesLimit);
   const [tableIdOption, setTableIdOption] = useState(true);
   const [tableCreatedOn, setTableCreatedOn] = useState(true);
@@ -81,31 +83,36 @@ export default function TablesListPage() {
     }
     setSqlQuery(words.join(""));
   };
-  const handleDeleteTable = async (tableName) => {
-    if (confirm(`Are you sure you want to delete the table "${tableName}"?`)) {
+  const confirmDeleteTable = (tableName) => {
+    setTableToDelete(tableName);
+    setIsDeleteModalOpen(true);
+  };
+  const handleDeleteTable = async () => {
+    if (!tableToDelete) return;
+    try {
+      const res = await fetch("/api/database/tables/delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dbName, tableName: tableToDelete })
+      });
+      const responseText = await res.text();
+      let data;
       try {
-        const res = await fetch("/api/database/tables/delete", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dbName, tableName })
-        });
-        const responseText = await res.text();
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch (err) {
-          console.error("Non-JSON response for table deletion:", responseText);
-          alert(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`);
-          return;
-        }
-        if (res.ok && data.success) {
-          await fetchTables();
-        } else {
-          alert(data.error || "Failed to delete table");
-        }
+        data = JSON.parse(responseText);
       } catch (err) {
-        console.error(err);
+        console.error("Non-JSON response for table deletion:", responseText);
+        alert(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`);
+        return;
       }
+      if (res.ok && data.success) {
+        await fetchTables();
+        setIsDeleteModalOpen(false);
+        setTableToDelete("");
+      } else {
+        alert(data.error || "Failed to delete table");
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
   const handleSaveTable = async (e) => {
@@ -365,9 +372,9 @@ export default function TablesListPage() {
                           <button style={actBtnStyle()} title="View Columns / Structure" onClick={() => router.push(`/dashboard/db/${dbName}/${table.name}`)}>
                             <EyeIcon />
                           </button>
-                          <button style={actBtnStyle()} title="Delete Table" onClick={() => handleDeleteTable(table.name)}>
-                            <TrashIcon />
-                          </button>
+                          <button style={actBtnStyle()} title="Delete Table" onClick={() => confirmDeleteTable(table.name)}>
+                             <TrashIcon />
+                           </button>
                         </div>
                       </td>
                     </tr>)}
@@ -803,6 +810,47 @@ export default function TablesListPage() {
     style={{ padding: "8px 16px", borderRadius: "6px", border: "1px solid var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", cursor: "pointer", fontSize: "14px" }}
   >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>}
+
+      {/* ==================== MODAL: DELETE TABLE CONFIRMATION ==================== */}
+      {isDeleteModalOpen && <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(15, 23, 42, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1e3 }}>
+          <div style={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "12px", width: "450px", maxWidth: "90vw", boxShadow: "var(--shadow-lg)", overflow: "hidden" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "30px 24px", textAlign: "center" }}>
+              <div style={{ width: "56px", height: "56px", borderRadius: "50%", backgroundColor: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", color: "#ef4444", marginBottom: "20px" }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <h3 style={{ margin: "0 0 8px 0", fontSize: "18px", fontWeight: "bold", color: "var(--text-primary)" }}>
+                Delete {dbName.startsWith("mongodb:") ? "Collection" : "Table"}
+              </h3>
+              <p style={{ margin: 0, fontSize: "14px", color: "var(--text-muted)", lineHeight: "1.5" }}>
+                Are you sure you want to delete the {dbName.startsWith("mongodb:") ? "collection" : "table"} <strong style={{ color: "var(--text-primary)" }}>{tableToDelete}</strong>? This action is permanent and all data inside it will be lost forever.
+              </p>
+            </div>
+            
+            <div style={{ display: "flex", borderTop: "1px solid var(--border-color)", backgroundColor: "var(--bg-tertiary)" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setTableToDelete("");
+                }}
+                style={{ flex: 1, padding: "16px", background: "none", border: "none", borderRight: "1px solid var(--border-color)", cursor: "pointer", fontSize: "14px", fontWeight: "600", color: "var(--text-secondary)", outline: "none" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteTable}
+                style={{ flex: 1, padding: "16px", background: "none", border: "none", cursor: "pointer", fontSize: "14px", fontWeight: "bold", color: "#ef4444", outline: "none" }}
+              >
+                Delete {dbName.startsWith("mongodb:") ? "Collection" : "Table"}
               </button>
             </div>
           </div>
