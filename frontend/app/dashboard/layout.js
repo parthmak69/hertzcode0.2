@@ -21,6 +21,7 @@ export default function DashboardLayout({ children }) {
   const [logoSrc, setLogoSrc] = useState("/logo.png");
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [userNameLetter, setUserNameLetter] = useState("A");
+  const [authorized, setAuthorized] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const handleSignOut = () => {
@@ -28,13 +29,19 @@ export default function DashboardLayout({ children }) {
     router.push("/");
   };
   useEffect(() => {
+    const user = localStorage.getItem("currentUser");
+    if (!user) {
+      router.push("/");
+    } else {
+      setAuthorized(true);
+    }
     const theme = document.documentElement.getAttribute("data-theme");
     setIsDark(theme === "dark");
     const storedName = localStorage.getItem("currentUserName");
     if (storedName) {
       setUserNameLetter(storedName.trim().charAt(0) || "A");
     }
-  }, []);
+  }, [router]);
   const toggleTheme = () => {
     const nextDark = !isDark;
     setIsDark(nextDark);
@@ -69,6 +76,11 @@ export default function DashboardLayout({ children }) {
   const isDbActive = pathname === "/dashboard" || pathname.startsWith("/dashboard/db");
   const isCrudActive = pathname.startsWith("/dashboard/crud");
   const isPortal = pathname?.includes("/admin-portal");
+  if (!authorized) {
+    return <div style={{ display: "flex", height: "100vh", width: "100vw", alignItems: "center", justifyContent: "center", fontFamily: "sans-serif", backgroundColor: "#fafbfd", color: "#0f172a" }}>
+      Loading Dashboard...
+    </div>;
+  }
   if (isPortal) {
     return <>{children}</>;
   }

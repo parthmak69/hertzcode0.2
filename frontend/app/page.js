@@ -12,6 +12,12 @@ export default function LoginPage() {
   const [logoSrc, setLogoSrc] = useState("/logo.png");
   const [rememberMe, setRememberMe] = useState(false);
   useEffect(() => {
+    const user = localStorage.getItem("currentUser");
+    if (user) {
+      router.push("/dashboard");
+    }
+  }, [router]);
+  useEffect(() => {
     const savedEmail = localStorage.getItem("rememberedEmail");
     const savedRememberMe = localStorage.getItem("rememberMe") === "true";
     if (savedRememberMe && savedEmail) {
