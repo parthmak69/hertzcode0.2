@@ -91,7 +91,6 @@ export default function DatabaseListPage() {
     setAiGeneratedSql("");
     setAiGeneratedTableName("");
     setAiGeneratedColumns([]);
-    alert(`Successfully generated table query for '${aiGeneratedTableName}'!`);
   };
   const fetchDatabases = async (user) => {
     try {

@@ -215,7 +215,6 @@ export default function TablesListPage() {
         await fetchTables();
         setIsAiModalOpen(false);
         setAiGeneratedSql("");
-        alert(`Table "${tblName}" successfully added to the database via AI Generator!`);
       } else {
         alert(data.error || "Failed to create table via AI");
       }
