@@ -1,0 +1,573 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================
+   SAME DESIGN SYSTEM AS MAIN WEBSITE
+   ============================================ */
+
+:root {
+  --background: oklch(0.995 0.005 250);
+  --foreground: oklch(0.15 0.02 250);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.15 0.02 250);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0.02 250);
+
+  --primary: oklch(62% 0.22 15);
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary: oklch(0.96 0.01 250);
+  --secondary-foreground: oklch(0.15 0.02 250);
+
+  --muted: oklch(0.96 0.01 250);
+  --muted-foreground: oklch(0.45 0.03 250);
+
+  --accent: oklch(0.94 0.02 250);
+  --accent-foreground: oklch(0.25 0.08 250);
+
+  --destructive: oklch(0.5 0.21 26.5);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  --border: oklch(0.90 0.01 250);
+  --input: oklch(0.90 0.01 250);
+  --ring: oklch(62% 0.22 15);
+
+  --success: oklch(0.62 0.17 150);
+  --warning: oklch(0.75 0.15 85);
+  --info: oklch(0.65 0.15 250);
+
+  --sidebar: oklch(0.995 0.005 250);
+  --sidebar-foreground: oklch(0.2 0.02 250);
+  --sidebar-primary: oklch(62% 0.22 15);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.95 0.01 250);
+  --sidebar-accent-foreground: oklch(0.2 0.05 250);
+  --sidebar-border: oklch(0.90 0.01 250);
+  --sidebar-ring: oklch(62% 0.22 15);
+
+  --datatable-bg: oklch(1 0 0);
+  --datatable-header: oklch(0.96 0.01 250);
+  --datatable-row-alt: oklch(0.985 0.005 250);
+  --datatable-hover: oklch(0.94 0.02 250);
+  --datatable-border-strong: oklch(0.88 0.015 250);
+  --datatable-accent: var(--primary);
+}
+
+.dark {
+  --background: oklch(0.13 0.01 260);
+  --foreground: oklch(0.96 0.01 260);
+
+  --card: oklch(0.18 0.012 260);
+  --card-foreground: oklch(0.96 0.01 260);
+
+  --popover: oklch(0.18 0.012 260);
+  --popover-foreground: oklch(0.96 0.01 260);
+
+  --primary: oklch(65% 0.22 15);
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary: oklch(0.22 0.015 260);
+  --secondary-foreground: oklch(0.92 0.01 260);
+
+  --muted: oklch(0.22 0.015 260);
+  --muted-foreground: oklch(0.70 0.01 260);
+
+  --accent: oklch(0.25 0.015 260);
+  --accent-foreground: oklch(0.94 0.01 260);
+
+  --destructive: oklch(0.52 0.16 26.5);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  --border: oklch(0.30 0.015 260);
+  --input: oklch(0.30 0.015 260);
+  --ring: oklch(65% 0.22 15);
+
+  --success: oklch(0.64 0.12 150);
+  --warning: oklch(0.7 0.12 85);
+  --info: oklch(0.6 0.1 260);
+
+  --sidebar: oklch(0.16 0.01 260);
+  --sidebar-foreground: oklch(0.95 0.01 260);
+  --sidebar-primary: oklch(65% 0.22 15);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.21 0.01 260);
+  --sidebar-accent-foreground: oklch(0.95 0.01 260);
+  --sidebar-border: oklch(0.30 0.015 260);
+  --sidebar-ring: oklch(65% 0.22 15);
+
+  --datatable-bg: oklch(0.17 0.01 260);
+  --datatable-header: oklch(0.20 0.01 260);
+  --datatable-row-alt: oklch(0.19 0.01 260);
+  --datatable-hover: oklch(0.24 0.01 260);
+  --datatable-border-strong: oklch(0.30 0.015 260);
+  --datatable-accent: var(--primary);
+}
+
+/* ============================================
+   THEME TOKENS
+   ============================================ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-datatable-bg: var(--datatable-bg);
+  --color-datatable-header: var(--datatable-header);
+  --color-datatable-row-alt: var(--datatable-row-alt);
+  --color-datatable-hover: var(--datatable-hover);
+  --color-datatable-border: var(--datatable-border-strong);
+  --color-datatable-accent: var(--datatable-accent);
+
+}
+
+/* ============================================
+   BASE
+   ============================================ */
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-poppins), system-ui, sans-serif;
+  }
+}
+
+/* Apply CSS Variables to Common Classes */
+.bg-theme-primary {
+  background-color: var(--bg-primary);
+}
+
+.bg-theme-secondary {
+  background-color: var(--bg-secondary);
+}
+
+.bg-theme-tertiary {
+  background-color: var(--bg-tertiary);
+}
+
+.bg-theme-surface {
+  background-color: var(--surface);
+}
+
+.bg-theme-surface-elevated {
+  background-color: var(--surface-elevated);
+}
+
+.border-theme-primary {
+  border-color: var(--border-primary);
+}
+
+.border-theme-secondary {
+  border-color: var(--border-secondary);
+}
+
+.border-theme-focus {
+  border-color: var(--border-focus);
+}
+
+.text-theme-primary {
+  color: var(--text-primary);
+}
+
+.text-theme-secondary {
+  color: var(--text-secondary);
+}
+
+.text-theme-tertiary {
+  color: var(--text-tertiary);
+}
+
+.text-theme-quaternary {
+  color: var(--text-quaternary);
+}
+
+.bg-accent-primary {
+  background-color: var(--accent-primary);
+}
+
+.bg-accent-hover {
+  background-color: var(--accent-hover);
+}
+
+.bg-accent-light {
+  background-color: var(--accent-light);
+}
+
+.text-accent {
+  color: var(--accent-text);
+}
+
+.bg-input {
+  background-color: var(--input-bg);
+}
+
+.border-input {
+  border-color: var(--input-border);
+}
+
+.text-input {
+  color: var(--input-text);
+}
+
+.text-input-placeholder {
+  color: var(--input-placeholder);
+}
+
+.border-input-focus {
+  border-color: var(--input-focus-border);
+}
+
+/* Smooth scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Mobile responsive utilities */
+@media (max-width: 1024px) {
+  .lg\:ml-64 {
+    margin-left: 0 !important;
+  }
+}
+
+/* Table responsive improvements - ensure horizontal scroll works */
+.table-responsive {
+  min-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .table-responsive {
+    font-size: 0.875rem;
+  }
+
+  .table-responsive th,
+  .table-responsive td {
+    padding: 0.5rem 0.75rem;
+  }
+
+  /* Ensure table can scroll horizontally on mobile */
+  .table-responsive table {
+    min-width: 600px;
+    /* Force minimum width for horizontal scroll */
+  }
+}
+
+/* Ensure overflow containers work properly */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  /* Smooth scrolling on iOS */
+}
+
+/* Rendered HTML content (WYSIWYG output) - headings, paragraphs, lists, links */
+.content-rendered {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--foreground);
+  /* Ensure content stays within container */
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+}
+
+.content-rendered p {
+  margin: 0 0 0.75em;
+  max-width: 100%;
+}
+
+.content-rendered p:last-child {
+  margin-bottom: 0;
+}
+
+.content-rendered h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 1em 0 0.5em;
+  line-height: 1.3;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.content-rendered h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 1em 0 0.5em;
+  line-height: 1.3;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.content-rendered h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0.875em 0 0.5em;
+  line-height: 1.4;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.content-rendered h4,
+.content-rendered h5,
+.content-rendered h6 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0.75em 0 0.5em;
+  line-height: 1.4;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.content-rendered ul,
+.content-rendered ol {
+  margin: 0.5em 0 0.75em;
+  padding-left: 1.5em;
+  max-width: 100%;
+}
+
+.content-rendered ul {
+  list-style-type: disc;
+}
+
+.content-rendered ol {
+  list-style-type: decimal;
+}
+
+.content-rendered li {
+  margin: 0.25em 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.content-rendered strong {
+  font-weight: 600;
+}
+
+.content-rendered em {
+  font-style: italic;
+}
+
+.content-rendered u {
+  text-decoration: underline;
+}
+
+.content-rendered s {
+  text-decoration: line-through;
+}
+
+.content-rendered a {
+  color: var(--primary);
+  text-decoration: underline;
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
+
+.content-rendered a:hover {
+  text-decoration: none;
+}
+
+.content-rendered blockquote {
+  margin: 0.75em 0;
+  padding-left: 1em;
+  border-left: 4px solid var(--border);
+  color: var(--muted-foreground);
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.content-rendered img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  display: block;
+}
+
+.content-rendered table {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.content-rendered table th,
+.content-rendered table td {
+  border: 1px solid var(--border);
+  padding: 0.5em 0.75em;
+  text-align: left;
+  word-break: break-word;
+}
+
+.content-rendered table th {
+  background-color: var(--muted);
+  font-weight: 600;
+}
+
+.content-rendered pre {
+  background-color: var(--muted);
+  padding: 1em;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin: 0.75em 0;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.content-rendered code {
+  background-color: var(--muted);
+  padding: 0.2em 0.4em;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.content-rendered pre code {
+  background-color: transparent;
+  padding: 0;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* Ensure any nested divs or spans also respect container */
+.content-rendered div,
+.content-rendered span {
+  max-width: 100%;
+}
+
+/* Handle long URLs and text that might overflow */
+.content-rendered * {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* FilePond Styling */
+.filepond--panel-root {
+  background-color: var(--bg-secondary);
+  border: 1px dashed var(--border-tertiary);
+}
+
+.filepond--drop-label {
+  color: var(--text-tertiary);
+}
+
+.filepond--drop-label label {
+  color: var(--text-tertiary);
+}
+
+.filepond--label-action {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.filepond--label-action:hover {
+  text-decoration: underline;
+}
+
+.filepond--item-panel {
+  background-color: var(--bg-hover);
+}
+
+.filepond--file-action-button {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .filepond--file-action-button {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="dark"] .filepond--file {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .filepond--drip-blob {
+  background-color: var(--border-tertiary);
+}
+
+/* FilePond full dark mode (when wrapper has .filepond-dark) */
+.filepond-dark .filepond--panel-root,
+[data-theme="dark"] .filepond--panel-root {
+  background-color: var(--surface);
+  border-color: var(--border-primary);
+}
+
+.filepond-dark .filepond--drop-label label,
+[data-theme="dark"] .filepond--drop-label label {
+  color: var(--text-tertiary);
+}
+
+.filepond-dark .filepond--drop-label,
+[data-theme="dark"] .filepond--drop-label {
+  color: var(--text-tertiary);
+}
+
+.filepond-dark .filepond--item-panel,
+[data-theme="dark"] .filepond--item-panel {
+  background-color: var(--bg-hover);
+  border-color: var(--border-primary);
+}
+
+.filepond-dark .filepond--file .filepond--file-status,
+[data-theme="dark"] .filepond--file .filepond--file-status {
+  color: var(--text-tertiary);
+}
+
+.filepond-dark .filepond--file .filepond--file-info,
+[data-theme="dark"] .filepond--file .filepond--file-info {
+  color: var(--text-secondary);
+}
+
+.filepond-dark .filepond--credits,
+[data-theme="dark"] .filepond--credits {
+  color: var(--text-quaternary);
+}
