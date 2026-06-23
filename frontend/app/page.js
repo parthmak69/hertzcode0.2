@@ -2,7 +2,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "./context/ToastContext";
 export default function LoginPage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -75,12 +77,15 @@ export default function LoginPage() {
         }
         localStorage.setItem("currentUser", data.username || email);
         localStorage.setItem("currentUserName", data.name || "");
+        showToast("Logged in successfully! Welcome back.", "success");
         router.push("/dashboard");
       } else {
         setError(data.error || "Invalid email or password.");
+        showToast(data.error || "Invalid email or password.", "error");
       }
     } catch (err) {
       setError("Network error. Please try again.");
+      showToast("Network error. Please try again.", "error");
     } finally {
       setLoading(false);
     }

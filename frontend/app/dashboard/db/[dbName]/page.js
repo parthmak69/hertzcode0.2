@@ -2,6 +2,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useToast } from "../../../context/ToastContext";
 const SyncIcon = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
   </svg>;
@@ -14,6 +15,7 @@ const EyeIcon = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none
     <circle cx="12" cy="12" r="3" />
   </svg>;
 export default function TablesListPage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const params = useParams();
   const dbName = params?.dbName;
@@ -101,18 +103,20 @@ export default function TablesListPage() {
         data = JSON.parse(responseText);
       } catch (err) {
         console.error("Non-JSON response for table deletion:", responseText);
-        alert(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`);
+        showToast(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`, "error");
         return;
       }
       if (res.ok && data.success) {
         await fetchTables();
         setIsDeleteModalOpen(false);
+        showToast(`Table "${tableToDelete}" deleted successfully`, "success");
         setTableToDelete("");
       } else {
-        alert(data.error || "Failed to delete table");
+        showToast(data.error || "Failed to delete table", "error");
       }
     } catch (err) {
       console.error(err);
+      showToast(err.message || "Failed to delete table", "error");
     }
   };
   const handleSaveTable = async (e) => {
@@ -140,7 +144,7 @@ export default function TablesListPage() {
         data = JSON.parse(responseText);
       } catch (err) {
         console.error("Non-JSON response for table creation:", responseText);
-        alert(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`);
+        showToast(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`, "error");
         return;
       }
       if (res.ok && data.success) {
@@ -154,11 +158,13 @@ export default function TablesListPage() {
           { name: "", type: "VARCHAR", size: "100", index: "---", defaultValue: "NULL", comment: "" },
           { name: "", type: "VARCHAR", size: "100", index: "---", defaultValue: "NULL", comment: "" }
         ]);
+        showToast(`Table "${formattedTableName}" created successfully`, "success");
       } else {
-        alert(data.error || "Failed to create table");
+        showToast(data.error || "Failed to create table", "error");
       }
     } catch (err) {
       console.error(err);
+      showToast(err.message || "Failed to create table", "error");
     }
   };
   const handleGenerateSql = async () => {
@@ -208,18 +214,20 @@ export default function TablesListPage() {
         data = JSON.parse(responseText);
       } catch (err) {
         console.error("Non-JSON raw table SQL response:", responseText);
-        alert(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`);
+        showToast(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`, "error");
         return;
       }
       if (res.ok && data.success) {
         await fetchTables();
         setIsAiModalOpen(false);
         setAiGeneratedSql("");
+        showToast(`Table "${tblName}" created via AI successfully`, "success");
       } else {
-        alert(data.error || "Failed to create table via AI");
+        showToast(data.error || "Failed to create table via AI", "error");
       }
     } catch (err) {
       console.error(err);
+      showToast(err.message || "Failed to create table via AI", "error");
     }
   };
   const handleAddTableColumnRow = () => {

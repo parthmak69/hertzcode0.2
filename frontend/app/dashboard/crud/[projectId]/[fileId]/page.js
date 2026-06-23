@@ -2,7 +2,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useToast } from "../../../../context/ToastContext";
 export default function CrudUiConfigPage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const params = useParams();
   const projectId = params?.projectId;
@@ -200,19 +202,14 @@ ${file.columns.filter((c) => c.isListCol !== false).map((c) => `            <td 
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        alert(`Changes saved successfully!
-
-Files successfully written to your local project directory:
-- Config JSON: schemas/${file.name}.json
-- UI Code: components/${file.name}Crud.tsx
-- API Route: pages/api/${file.name}/route.ts`);
+        showToast(`Changes saved successfully! Files successfully written to your local project directory.`, "success");
         router.push(`/dashboard/crud/${projectId}`);
       } else {
-        alert("Warning: Settings saved locally in browser, but failed to write to local directory: " + (data.error || "Unknown write error"));
+        showToast("Warning: Settings saved locally in browser, but failed to write to local directory: " + (data.error || "Unknown write error"), "warning");
         router.push(`/dashboard/crud/${projectId}`);
       }
     } catch (err) {
-      alert("Warning: Settings saved locally in browser, but failed to call file writer API: " + err.message);
+      showToast("Warning: Settings saved locally in browser, but failed to call file writer API: " + err.message, "warning");
       router.push(`/dashboard/crud/${projectId}`);
     }
   };

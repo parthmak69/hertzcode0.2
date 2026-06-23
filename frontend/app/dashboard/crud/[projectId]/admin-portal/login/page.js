@@ -2,7 +2,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useToast } from "../../../../../context/ToastContext";
 export default function PortalLoginPage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const params = useParams();
   const projectId = params?.projectId;
@@ -32,9 +34,11 @@ export default function PortalLoginPage() {
     setTimeout(() => {
       if (username === "admin" && password === "admin123") {
         sessionStorage.setItem(`portal_logged_in_${projectId}`, "true");
+        showToast("Admin Portal: Logged in successfully!", "success");
         router.push(`/dashboard/crud/${projectId}/admin-portal/dashboard`);
       } else {
         setError("Invalid username or password. Use default credentials: admin / admin123");
+        showToast("Invalid credentials!", "error");
         setLoading(false);
       }
     }, 600);

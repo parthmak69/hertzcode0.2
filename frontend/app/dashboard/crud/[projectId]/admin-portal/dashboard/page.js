@@ -2,7 +2,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useToast } from "../../../../../context/ToastContext";
 export default function PortalDashboardPage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const params = useParams();
   const projectId = params?.projectId;
@@ -119,7 +121,7 @@ export default function PortalDashboardPage() {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        alert(editingId ? "Record updated successfully!" : "Record inserted successfully!");
+        showToast(editingId ? "Record updated successfully!" : "Record inserted successfully!", "success");
         const resetForm = {};
         activeSchema.columns.forEach((col) => {
           resetForm[col.name] = col.type === "checkbox" ? false : col.type === "number" ? 0 : "";
@@ -128,10 +130,10 @@ export default function PortalDashboardPage() {
         setEditingId(null);
         fetchRecords();
       } else {
-        alert("Failed to save record: " + (data.error || "Unknown error"));
+        showToast("Failed to save record: " + (data.error || "Unknown error"), "error");
       }
     } catch (err) {
-      alert("Error saving record: " + err.message);
+      showToast("Error saving record: " + err.message, "error");
     }
   };
   const handleEdit = (item) => {
@@ -154,12 +156,13 @@ export default function PortalDashboardPage() {
       );
       const data = await res.json();
       if (res.ok && data.success) {
+        showToast("Record deleted successfully", "success");
         fetchRecords();
       } else {
-        alert("Failed to delete: " + (data.error || "Unknown error"));
+        showToast("Failed to delete: " + (data.error || "Unknown error"), "error");
       }
     } catch (err) {
-      alert("Error deleting: " + err.message);
+      showToast("Error deleting: " + err.message, "error");
     }
   };
   const handleMoveToTop = (item) => {
@@ -195,7 +198,7 @@ export default function PortalDashboardPage() {
       }
     });
     if (matched.length === 0) {
-      alert(`No records found matching '${keyword}'`);
+      showToast(`No records found matching '${keyword}'`, "warning");
       return;
     }
     const sortedItems = [...matched, ...unmatched];
@@ -203,7 +206,7 @@ export default function PortalDashboardPage() {
     const newOrder = sortedItems.map((x) => String(x._id || x.id));
     localStorage.setItem(orderKey, JSON.stringify(newOrder));
     setItems(sortedItems);
-    alert(`Moved ${matched.length} item(s) matching '${keyword}' to the top!`);
+    showToast(`Moved ${matched.length} item(s) matching '${keyword}' to the top!`, "success");
   };
   const handleShuffle = () => {
     if (!activeSchema || items.length === 0) return;
@@ -219,6 +222,7 @@ export default function PortalDashboardPage() {
   };
   const handleLogout = () => {
     sessionStorage.removeItem(`portal_logged_in_${projectId}`);
+    showToast("Admin Portal: Logged out successfully", "success");
     router.push(`/dashboard/crud/${projectId}/admin-portal/login`);
   };
   const isImageUrl = (colName, value) => {
