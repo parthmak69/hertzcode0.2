@@ -38,8 +38,9 @@ export default function DashboardLayout({ children }) {
     } else {
       setAuthorized(true);
     }
-    const theme = document.documentElement.getAttribute("data-theme");
-    setIsDark(theme === "dark");
+    const savedTheme = localStorage.getItem("theme") || "light";
+    document.documentElement.setAttribute("data-theme", savedTheme);
+    setIsDark(savedTheme === "dark");
     const storedName = localStorage.getItem("currentUserName");
     if (storedName) {
       setUserNameLetter(storedName.trim().charAt(0) || "A");
