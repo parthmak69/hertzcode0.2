@@ -12,12 +12,13 @@ export const generateSql = async (req, res) => {
       return res.status(500).json({ error: "Gemini API key is not configured in .env" });
     }
 
-    const isMongo = dbName && dbName.startsWith("mongodb:");
+    const decodedDbName = dbName ? decodeURIComponent(dbName) : "";
+    const isMongo = decodedDbName && decodedDbName.startsWith("mongodb:");
 
     let promptText = `You are an expert SQL assistant. Generate clean, valid MySQL queries based on the user's prompt. 
 You MUST adhere strictly to standard MySQL syntax rules:
 1. Use \`AUTO_INCREMENT\` (with underscore, NOT \`AUTOINCREMENT\`) for auto-incrementing primary keys.
-2. Ensure every column data type is standard MySQL (e.g. \`INT\`, \`VARCHAR(length)\internal\`, \`TEXT\`, \`DECIMAL(10,2)\`, \`DATETIME\`).
+2. Ensure every column data type is standard MySQL (e.g. \`INT\`, \`VARCHAR(length)\`, \`TEXT\`, \`DECIMAL(10,2)\`, \`DATETIME\`).
 3. Wrap column names in backticks.
 Only return the raw SQL code block. Do NOT wrap it in markdown code blocks (like \`\`\`sql) or write any extra conversational text.
 
@@ -38,7 +39,7 @@ User Prompt: "${prompt}"`;
     }
 
     // Call dynamic generative language model endpoints
-    const modelName = "gemini-2.5-flash";
+    const modelName = "gemini-2.5-flash-lite";
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
       {

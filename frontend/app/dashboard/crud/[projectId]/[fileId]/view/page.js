@@ -2,7 +2,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useToast } from "../../../../../context/ToastContext";
 export default function CrudLiveAdminPage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const params = useParams();
   const projectId = params?.projectId;
@@ -80,7 +82,7 @@ export default function CrudLiveAdminPage() {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        alert(editingId ? "Record updated successfully!" : "Record inserted successfully!");
+        showToast(editingId ? "Record updated successfully!" : "Record inserted successfully!", "success");
         const resetForm = {};
         file.columns.forEach((col) => {
           resetForm[col.name] = col.type === "checkbox" ? false : col.type === "number" ? 0 : "";
@@ -89,10 +91,10 @@ export default function CrudLiveAdminPage() {
         setEditingId(null);
         fetchRecords();
       } else {
-        alert("Failed to save record: " + (data.error || "Unknown error"));
+        showToast("Failed to save record: " + (data.error || "Unknown error"), "error");
       }
     } catch (err) {
-      alert("Error saving record: " + err.message);
+      showToast("Error saving record: " + err.message, "error");
     }
   };
   const handleEdit = (item) => {
@@ -115,12 +117,13 @@ export default function CrudLiveAdminPage() {
       );
       const data = await res.json();
       if (res.ok && data.success) {
+        showToast("Record deleted successfully", "success");
         fetchRecords();
       } else {
-        alert("Failed to delete record: " + (data.error || "Unknown error"));
+        showToast("Failed to delete record: " + (data.error || "Unknown error"), "error");
       }
     } catch (err) {
-      alert("Error deleting record: " + err.message);
+      showToast("Error deleting record: " + err.message, "error");
     }
   };
   const filteredItems = items.filter((item) => {

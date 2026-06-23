@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useToast } from "../context/ToastContext";
 const DatabaseIcon = ({ active }) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: active ? "#ffffff" : "rgba(255,255,255,0.7)" }}>
     <ellipse cx="12" cy="5" rx="9" ry="3" />
     <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
@@ -16,6 +17,7 @@ const CrudIcon = ({ active }) => <svg width="18" height="18" viewBox="0 0 24 24"
     <polyline points="10 9 9 9 8 9" />
   </svg>;
 export default function DashboardLayout({ children }) {
+  const { showToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [logoSrc, setLogoSrc] = useState("/logo.png");
@@ -26,6 +28,7 @@ export default function DashboardLayout({ children }) {
   const router = useRouter();
   const handleSignOut = () => {
     localStorage.removeItem("currentUser");
+    showToast("Logged out successfully", "success");
     router.push("/");
   };
   useEffect(() => {
@@ -35,8 +38,9 @@ export default function DashboardLayout({ children }) {
     } else {
       setAuthorized(true);
     }
-    const theme = document.documentElement.getAttribute("data-theme");
-    setIsDark(theme === "dark");
+    const savedTheme = localStorage.getItem("theme") || "light";
+    document.documentElement.setAttribute("data-theme", savedTheme);
+    setIsDark(savedTheme === "dark");
     const storedName = localStorage.getItem("currentUserName");
     if (storedName) {
       setUserNameLetter(storedName.trim().charAt(0) || "A");
@@ -84,7 +88,8 @@ export default function DashboardLayout({ children }) {
   if (isPortal) {
     return <>{children}</>;
   }
-  return <div style={{ display: "flex", flexDirection: "column", height: "100vh", width: "100vw", overflow: "hidden", fontFamily: "'Outfit', 'Inter', sans-serif", backgroundColor: "var(--bg-primary)" }}>
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", width: "100vw", overflow: "hidden", fontFamily: "'Outfit', 'Inter', sans-serif", backgroundColor: "var(--bg-primary)" }}>
       
       {
     /* ==================== CLEAN TOP HEADER PANEL ==================== */
@@ -298,5 +303,6 @@ export default function DashboardLayout({ children }) {
           {children}
         </div>
       </div>
-    </div>;
+    </div>
+  );
 }

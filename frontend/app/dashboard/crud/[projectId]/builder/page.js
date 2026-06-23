@@ -2,7 +2,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useToast } from "../../../../context/ToastContext";
 export default function AdvancedCrudBuilder() {
+  const { showToast } = useToast();
   const router = useRouter();
   const params = useParams();
   const projectId = params?.projectId;
@@ -193,7 +195,7 @@ export default function AdvancedCrudBuilder() {
       ...projectConfig,
       [selectedTable]: updatedTableConfig
     });
-    alert("Create Form settings copied to Edit Form!");
+    showToast("Create Form settings copied to Edit Form!", "success");
   };
   const handleResetTabToDefault = () => {
     if (!currentTableConfig || !selectedFieldName) return;
@@ -256,15 +258,15 @@ export default function AdvancedCrudBuilder() {
             setColumnsMap(newColumnsMap);
             setSelectedTable(newTables[0]);
             setSelectedFieldName("");
-            alert("CRUD JSON Configuration imported successfully! UI behaviour maps updated.");
+            showToast("CRUD JSON Configuration imported successfully! UI behaviour maps updated.", "success");
           } else {
-            alert("Invalid config format: no valid tables found.");
+            showToast("Invalid config format: no valid tables found.", "error");
           }
         } else {
-          alert("Expected a JSON array containing table configurations.");
+          showToast("Expected a JSON array containing table configurations.", "error");
         }
       } catch (err) {
-        alert("Failed to parse JSON configuration file: " + err.message);
+        showToast("Failed to parse JSON configuration file: " + err.message, "error");
       }
     };
     reader.readAsText(file);

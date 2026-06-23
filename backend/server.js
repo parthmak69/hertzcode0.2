@@ -14,6 +14,17 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+// Decode dbName parameter middleware to handle URL-encoded values (like mongodb%3A...)
+app.use((req, res, next) => {
+  if (req.query && req.query.dbName) {
+    req.query.dbName = decodeURIComponent(req.query.dbName);
+  }
+  if (req.body && req.body.dbName) {
+    req.body.dbName = decodeURIComponent(req.body.dbName);
+  }
+  next();
+});
+
 // Register API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/database", databaseRoutes);

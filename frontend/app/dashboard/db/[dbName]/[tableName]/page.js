@@ -2,7 +2,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useToast } from "../../../../context/ToastContext";
 export default function TableDetailPage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const params = useParams();
   const dbName = params?.dbName;
@@ -78,20 +80,20 @@ export default function TableDetailPage() {
         data = JSON.parse(responseText);
       } catch (err) {
         console.error("Non-JSON response for table seeding:", responseText);
-        alert(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`);
+        showToast(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`, "error");
         return;
       }
       if (res.ok && data.success) {
         await fetchTableDetails();
         await fetchRows();
         setActiveView("browse");
-        alert(`Mock records inserted successfully for table: ${tableName}!`);
+        showToast(`Mock records inserted successfully for table: ${tableName}!`, "success");
       } else {
-        alert(`Failed to insert mock data: ${data.error || "Unknown error"}`);
+        showToast(`Failed to insert mock data: ${data.error || "Unknown error"}`, "error");
       }
     } catch (err) {
       console.error("Failed to seed table:", err);
-      alert(`Seeding error: ${err.message}`);
+      showToast(`Seeding error: ${err.message}`, "error");
     }
   };
   if (!table) {

@@ -2,6 +2,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "../context/ToastContext";
 const QUICK_TABLE_OPTIONS = [
   { id: "admin", name: "admin" },
   { id: "blog", name: "blog" },
@@ -40,6 +41,7 @@ const DatabaseIcon = () => <svg width="13" height="13" viewBox="0 0 24 24" fill=
     <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
   </svg>;
 export default function DatabaseListPage() {
+  const { showToast } = useToast();
   const [databases, setDatabases] = useState([]);
   const [dbSearchQuery, setDbSearchQuery] = useState("");
   const [currentUser, setCurrentUser] = useState("");
@@ -91,7 +93,6 @@ export default function DatabaseListPage() {
     setAiGeneratedSql("");
     setAiGeneratedTableName("");
     setAiGeneratedColumns([]);
-    alert(`Successfully generated table query for '${aiGeneratedTableName}'!`);
   };
   const fetchDatabases = async (user) => {
     try {
@@ -154,18 +155,20 @@ export default function DatabaseListPage() {
         data = JSON.parse(responseText);
       } catch (err) {
         console.error("Non-JSON response for database deletion:", responseText);
-        alert(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`);
+        showToast(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`, "error");
         return;
       }
       if (res.ok && data.success) {
         await fetchDatabases(currentUser);
         setIsDeleteModalOpen(false);
+        showToast(`Database "${dbToDelete}" deleted successfully`, "success");
         setDbToDelete("");
       } else {
-        alert(data.error || "Failed to delete database");
+        showToast(data.error || "Failed to delete database", "error");
       }
     } catch (err) {
       console.error(err);
+      showToast(err.message || "Failed to delete database", "error");
     }
   };
   const handleSaveDatabase = async (e) => {
@@ -189,18 +192,20 @@ export default function DatabaseListPage() {
         data = JSON.parse(responseText);
       } catch (err) {
         console.error("Non-JSON response for database creation:", responseText);
-        alert(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`);
+        showToast(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`, "error");
         return;
       }
       if (res.ok && data.success) {
         await fetchDatabases(currentUser);
         setIsDbModalOpen(false);
         setNewDbName("");
+        showToast(`Database "${formattedDbName}" created successfully`, "success");
       } else {
-        alert(data.error || "Failed to create database");
+        showToast(data.error || "Failed to create database", "error");
       }
     } catch (err) {
       console.error(err);
+      showToast(err.message || "Failed to create database", "error");
     }
   };
   const toggleQuickTable = (tableId) => {
@@ -584,9 +589,11 @@ export default function DatabaseListPage() {
                   <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
                     <button
     onClick={() => {
-      navigator.clipboard.writeText(aiGeneratedSql).catch(() => {
+      navigator.clipboard.writeText(aiGeneratedSql).then(() => {
+        showToast("SQL Query copied to clipboard!", "success");
+      }).catch(() => {
+        showToast("Failed to copy SQL Query to clipboard", "error");
       });
-      alert("SQL Query copied to clipboard!");
     }}
     style={{
       padding: "8px 16px",
