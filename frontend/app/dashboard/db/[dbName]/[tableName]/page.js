@@ -42,23 +42,35 @@ export default function TableDetailPage() {
         data = JSON.parse(responseText);
       } catch (e) {
         console.error("Non-JSON table details:", responseText);
+        showToast("Error loading table details", "error");
+        router.push("/dashboard");
         return;
       }
       if (res.ok && data.success) {
         const found = data.tables.find((t) => t.name === tableName);
         if (found) {
           setTable(found);
+        } else {
+          showToast(`Table "${tableName}" not found.`, "error");
+          router.push(`/dashboard/db/${dbName}`);
         }
+      } else {
+        showToast(data.error || "Access denied or database error.", "error");
+        router.push("/dashboard");
       }
     } catch (err) {
       console.error("Failed to load table details:", err);
+      showToast("Network error loading details", "error");
+      router.push("/dashboard");
     }
   };
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTableDetails();
     if (activeView === "browse") {
       fetchRows();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dbName, tableName, activeView]);
   const handleSeedTable = async () => {
     if (!dbName || !tableName || !table) return;
@@ -98,7 +110,7 @@ export default function TableDetailPage() {
   };
   if (!table) {
     return <div style={{ padding: "24px", color: "var(--text-primary)" }}>
-        Loading table details for "{tableName}"...
+         Loading table details for &quot;{tableName}&quot;...
       </div>;
   }
   return <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -108,7 +120,7 @@ export default function TableDetailPage() {
   }
       <div style={{ height: "40px", backgroundColor: "var(--bannerBg)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", color: "white", fontSize: "13px", fontWeight: "600", flexShrink: 0, boxShadow: "0 2px 6px rgba(0,0,0,0.05)" }}>
         <span style={{ fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.8px" }}>
-          {dbName.startsWith("mongodb:") ? "Collection Details" : "Table Structure & Data"}
+          {dbName.startsWith('mongodb:') ? 'Collection Details' : 'Table Structure & Data'}
         </span>
         <span style={{ color: "rgba(255,255,255,0.8)" }}>Database Builder / {dbName} / {tableName}</span>
       </div>
@@ -196,7 +208,7 @@ export default function TableDetailPage() {
 
           {activeView === "structure" && <div>
               <h2 style={{ fontSize: "20px", fontWeight: "bold", color: "var(--text-primary)", marginBottom: "20px" }}>
-                Columns/Schema of "{table.name}":
+                 Columns/Schema of &quot;{table.name}&quot;:
               </h2>
 
               <div style={{ width: "100%", overflowX: "auto", border: "1px solid var(--border-color)", borderRadius: "8px" }}>
@@ -266,7 +278,7 @@ export default function TableDetailPage() {
           {activeView === "browse" && <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
                 <h2 style={{ fontSize: "20px", fontWeight: "bold", color: "var(--text-primary)" }}>
-                  Records in "{table.name}":
+                   Records in &quot;{table.name}&quot;:
                 </h2>
                 <button
     onClick={fetchRows}
@@ -329,7 +341,7 @@ export default function TableDetailPage() {
 
           {activeView === "seed" && <div>
               <h2 style={{ fontSize: "20px", fontWeight: "bold", color: "var(--text-primary)", marginBottom: "20px" }}>
-                Database Faker / Mock entries config for "{table.name}":
+                 Database Faker / Mock entries config for &quot;{table.name}&quot;:
               </h2>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "30px", marginBottom: "24px" }}>
@@ -397,7 +409,7 @@ export default function TableDetailPage() {
     style={{ width: "100%", backgroundColor: "#10b981", color: "#ffffff", border: "none", padding: "14px 20px", borderRadius: "6px", fontWeight: "bold", fontSize: "15px", cursor: "pointer", boxShadow: "0 4px 6px rgba(16, 185, 129, 0.2)" }}
     onClick={handleSeedTable}
   >
-                Insert Mock/Fake Data for '{table.name}' {dbName.startsWith("mongodb:") ? "collection" : "table"}
+                Insert Mock/Fake Data for &apos;{table.name}&apos; {dbName.startsWith("mongodb:") ? "collection" : "table"}
               </button>
             </div>}
         </div>

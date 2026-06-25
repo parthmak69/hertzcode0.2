@@ -19,6 +19,7 @@ export default function TablesListPage() {
   const router = useRouter();
   const params = useParams();
   const dbName = params?.dbName;
+  const [currentUser, setCurrentUser] = useState("");
   const [tables, setTables] = useState([]);
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -55,17 +56,28 @@ export default function TablesListPage() {
         data = JSON.parse(responseText);
       } catch (e) {
         console.error("Non-JSON tables list:", responseText);
+        showToast("Error loading tables list", "error");
+        router.push("/dashboard");
         return;
       }
       if (res.ok && data.success) {
         setTables(data.tables || []);
+      } else {
+        showToast(data.error || "Access denied or database error.", "error");
+        router.push("/dashboard");
       }
     } catch (err) {
       console.error("Failed to load tables:", err);
+      showToast("Network error loading tables", "error");
+      router.push("/dashboard");
     }
   };
   useEffect(() => {
+    const user = localStorage.getItem("currentUser") || localStorage.getItem("rememberedEmail") || "";
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentUser(user);
     fetchTables();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dbName]);
   const getSuggestions = () => {
     if (!sqlQuery) return [];
@@ -95,7 +107,7 @@ export default function TablesListPage() {
       const res = await fetch("/api/database/tables/delete", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dbName, tableName: tableToDelete })
+        body: JSON.stringify({ dbName, tableName: tableToDelete, username: currentUser })
       });
       const responseText = await res.text();
       let data;
@@ -449,98 +461,128 @@ export default function TablesListPage() {
                   </div>
                   <div style={{ width: "100%", overflowX: "auto", border: "1px solid var(--border-color)", borderRadius: "6px", padding: "14px", backgroundColor: "var(--bg-tertiary)" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: "10px", minWidth: "950px" }}>
-                      {tableColumns.map((col, idx) => <div key={idx} style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                          <input
-    type="text"
-    placeholder="Column Name"
-    value={col.name}
-    onChange={(e) => {
-      const updated = [...tableColumns];
-      updated[idx].name = e.target.value.toLowerCase().replace(/\s+/g, "_");
-      setTableColumns(updated);
-    }}
-    style={{ flex: 2, minWidth: "130px", padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "4px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}
-  />
+                      {tableColumns.map((col, idx) => (
+                        <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "8px", borderBottom: idx === tableColumns.length - 1 ? "none" : "1px solid var(--border-color)", paddingBottom: idx === tableColumns.length - 1 ? 0 : "12px", marginBottom: idx === tableColumns.length - 1 ? 0 : "4px" }}>
+                          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                            <input
+                              type="text"
+                              placeholder="Column Name"
+                              value={col.name}
+                              onChange={(e) => {
+                                const updated = [...tableColumns];
+                                updated[idx].name = e.target.value.toLowerCase().replace(/\s+/g, "_");
+                                setTableColumns(updated);
+                              }}
+                              style={{ flex: 2, minWidth: "130px", padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "4px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}
+                            />
 
-                          <select
-    value={col.type}
-    onChange={(e) => {
-      const updated = [...tableColumns];
-      updated[idx].type = e.target.value;
-      setTableColumns(updated);
-    }}
-    style={{ flex: 1.5, minWidth: "110px", padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "4px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}
-  >
-                            <option value="VARCHAR">VARCHAR</option>
-                            <option value="INT">INT</option>
-                            <option value="TEXT">TEXT</option>
-                            <option value="DATE">DATE</option>
-                            <option value="DATETIME">DATETIME</option>
-                            <option value="DECIMAL">DECIMAL</option>
-                            <option value="TINYINT">TINYINT</option>
-                          </select>
+                            <select
+                              value={col.type}
+                              onChange={(e) => {
+                                const updated = [...tableColumns];
+                                updated[idx].type = e.target.value;
+                                setTableColumns(updated);
+                              }}
+                              style={{ flex: 1.5, minWidth: "110px", padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "4px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}
+                            >
+                              <option value="VARCHAR">VARCHAR</option>
+                              <option value="INT">INT</option>
+                              <option value="TEXT">TEXT</option>
+                              <option value="DATE">DATE</option>
+                              <option value="DATETIME">DATETIME</option>
+                              <option value="DECIMAL">DECIMAL</option>
+                              <option value="TINYINT">TINYINT</option>
+                            </select>
 
-                          <input
-    type="text"
-    placeholder="Size"
-    value={col.size}
-    onChange={(e) => {
-      const updated = [...tableColumns];
-      updated[idx].size = e.target.value;
-      setTableColumns(updated);
-    }}
-    style={{ flex: 1, minWidth: "70px", padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "4px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}
-  />
+                            <input
+                              type="text"
+                              placeholder="Size"
+                              value={col.size}
+                              onChange={(e) => {
+                                const updated = [...tableColumns];
+                                updated[idx].size = e.target.value;
+                                setTableColumns(updated);
+                              }}
+                              style={{ flex: 1, minWidth: "70px", padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "4px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}
+                            />
 
-                          <select
-    value={col.index}
-    onChange={(e) => {
-      const updated = [...tableColumns];
-      updated[idx].index = e.target.value;
-      setTableColumns(updated);
-    }}
-    style={{ flex: 1.5, minWidth: "100px", padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "4px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}
-  >
-                            <option value="---">---</option>
-                            <option value="PRIMARY KEY">PRIMARY KEY</option>
-                            <option value="UNIQUE">UNIQUE</option>
-                            <option value="INDEX">INDEX</option>
-                          </select>
+                            <select
+                              value={col.index}
+                              onChange={(e) => {
+                                const updated = [...tableColumns];
+                                updated[idx].index = e.target.value;
+                                setTableColumns(updated);
+                              }}
+                              style={{ flex: 1.5, minWidth: "100px", padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "4px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}
+                            >
+                              <option value="---">---</option>
+                              <option value="PRIMARY KEY">PRIMARY KEY</option>
+                              <option value="UNIQUE">UNIQUE</option>
+                              <option value="INDEX">INDEX</option>
+                            </select>
 
-                          <select
-    value={col.defaultValue}
-    onChange={(e) => {
-      const updated = [...tableColumns];
-      updated[idx].defaultValue = e.target.value;
-      setTableColumns(updated);
-    }}
-    style={{ flex: 1.5, minWidth: "110px", padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "4px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}
-  >
-                            <option value="NULL">NULL</option>
-                            <option value="As Defined">As Defined</option>
-                            <option value="CURRENT_TIMESTAMP">CURRENT_TIMESTAMP</option>
-                          </select>
+                            <select
+                              value={col.defaultValue}
+                              onChange={(e) => {
+                                const updated = [...tableColumns];
+                                updated[idx].defaultValue = e.target.value;
+                                setTableColumns(updated);
+                              }}
+                              style={{ flex: 1.5, minWidth: "110px", padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "4px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}
+                            >
+                              <option value="NULL">NULL</option>
+                              <option value="As Defined">As Defined</option>
+                              <option value="CURRENT_TIMESTAMP">CURRENT_TIMESTAMP</option>
+                            </select>
 
-                          <input
-    type="text"
-    placeholder="Comment"
-    value={col.comment}
-    onChange={(e) => {
-      const updated = [...tableColumns];
-      updated[idx].comment = e.target.value;
-      setTableColumns(updated);
-    }}
-    style={{ flex: 2, minWidth: "130px", padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "4px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}
-  />
+                            <input
+                              type="text"
+                              placeholder="Comment"
+                              value={col.comment}
+                              onChange={(e) => {
+                                const updated = [...tableColumns];
+                                updated[idx].comment = e.target.value;
+                                setTableColumns(updated);
+                              }}
+                              style={{ flex: 2, minWidth: "130px", padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "4px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}
+                            />
 
-                          <button
-    type="button"
-    onClick={() => handleRemoveTableColumnRow(idx)}
-    style={{ width: "28px", height: "28px", border: "none", backgroundColor: "#ef4444", color: "white", fontWeight: "bold", fontSize: "14px", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
-  >
-                            ✕
-                          </button>
-                        </div>)}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTableColumnRow(idx)}
+                              style={{ width: "28px", height: "28px", border: "none", backgroundColor: "#ef4444", color: "white", fontWeight: "bold", fontSize: "14px", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          {col.defaultValue === "As Defined" && (
+                            <div style={{ display: "flex", gap: "10px", alignItems: "center", paddingLeft: "4px" }}>
+                              <span style={{ fontSize: "12.5px", color: "#eab308", fontWeight: "600" }}>Custom Default Value:</span>
+                              <input
+                                type="text"
+                                placeholder="Enter default value (e.g. active, 100, N/A)"
+                                value={col.customDefaultValue || ""}
+                                onChange={(e) => {
+                                  const updated = [...tableColumns];
+                                  updated[idx].customDefaultValue = e.target.value;
+                                  setTableColumns(updated);
+                                }}
+                                style={{
+                                  width: "320px",
+                                  padding: "6px 10px",
+                                  border: "1.5px solid var(--border-color)",
+                                  borderColor: "#eab308",
+                                  borderRadius: "6px",
+                                  backgroundColor: "var(--bg-secondary)",
+                                  color: "var(--text-primary)",
+                                  fontSize: "13px",
+                                  outline: "none"
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>

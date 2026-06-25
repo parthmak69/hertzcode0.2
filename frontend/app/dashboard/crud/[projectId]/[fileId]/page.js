@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useToast } from "../../../../context/ToastContext";
+import { getProjectsForUser, saveProjectsForUser } from "../../../../utils/projectStorage";
 export default function CrudUiConfigPage() {
   const { showToast } = useToast();
   const router = useRouter();
@@ -13,22 +14,22 @@ export default function CrudUiConfigPage() {
   const [allProjects, setAllProjects] = useState([]);
   const [file, setFile] = useState(null);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [currentUser, setCurrentUser] = useState("");
+  const [userRole, setUserRole] = useState("user");
   useEffect(() => {
-    const stored = localStorage.getItem("crudProjects");
-    if (stored) {
-      try {
-        const projs = JSON.parse(stored);
-        setAllProjects(projs);
-        const foundProj = projs.find((p) => p.id === projectId);
-        if (foundProj) {
-          setProject(foundProj);
-          const foundFile = foundProj.files.find((f) => f.id === fileId);
-          if (foundFile) {
-            setFile(foundFile);
-          }
-        }
-      } catch (e) {
-        console.error("Failed to parse projects", e);
+    const user = localStorage.getItem("currentUser") || "";
+    const role = localStorage.getItem("currentUserRole") || "user";
+    setCurrentUser(user);
+    setUserRole(role);
+
+    const projs = getProjectsForUser(user, role);
+    setAllProjects(projs);
+    const foundProj = projs.find((p) => p.id === projectId);
+    if (foundProj) {
+      setProject(foundProj);
+      const foundFile = foundProj.files.find((f) => f.id === fileId);
+      if (foundFile) {
+        setFile(foundFile);
       }
     }
   }, [projectId, fileId]);
@@ -40,7 +41,7 @@ export default function CrudUiConfigPage() {
     setProject(updatedProject);
     setFile(updatedFile);
     setAllProjects(updatedProjectsList);
-    localStorage.setItem("crudProjects", JSON.stringify(updatedProjectsList));
+    saveProjectsForUser(updatedProjectsList, currentUser, userRole);
   };
   const handleToggleSetting = (key) => {
     if (!file) return;

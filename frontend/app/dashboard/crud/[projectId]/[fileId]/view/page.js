@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useToast } from "../../../../../context/ToastContext";
+import { getProjectsForUser } from "../../../../../utils/projectStorage";
 export default function CrudLiveAdminPage() {
   const { showToast } = useToast();
   const router = useRouter();
@@ -18,25 +19,20 @@ export default function CrudLiveAdminPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showViewModal, setShowViewModal] = useState(null);
   useEffect(() => {
-    const stored = localStorage.getItem("crudProjects");
-    if (stored) {
-      try {
-        const projs = JSON.parse(stored);
-        const foundProj = projs.find((p) => p.id === projectId);
-        if (foundProj) {
-          setProject(foundProj);
-          const foundFile = foundProj.files.find((f) => f.id === fileId);
-          if (foundFile) {
-            setFile(foundFile);
-            const initialForm = {};
-            foundFile.columns.forEach((col) => {
-              initialForm[col.name] = col.type === "checkbox" ? false : col.type === "number" ? 0 : "";
-            });
-            setForm(initialForm);
-          }
-        }
-      } catch (e) {
-        console.error("Failed to parse projects", e);
+    const user = localStorage.getItem("currentUser") || "";
+    const role = localStorage.getItem("currentUserRole") || "user";
+    const projs = getProjectsForUser(user, role);
+    const foundProj = projs.find((p) => p.id === projectId);
+    if (foundProj) {
+      setProject(foundProj);
+      const foundFile = foundProj.files.find((f) => f.id === fileId);
+      if (foundFile) {
+        setFile(foundFile);
+        const initialForm = {};
+        foundFile.columns.forEach((col) => {
+          initialForm[col.name] = col.type === "checkbox" ? false : col.type === "number" ? 0 : "";
+        });
+        setForm(initialForm);
       }
     }
   }, [projectId, fileId]);

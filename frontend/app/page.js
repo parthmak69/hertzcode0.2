@@ -23,6 +23,7 @@ export default function LoginPage() {
     const savedEmail = localStorage.getItem("rememberedEmail");
     const savedRememberMe = localStorage.getItem("rememberMe") === "true";
     if (savedRememberMe && savedEmail) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEmail(savedEmail);
       setRememberMe(true);
     }
@@ -77,6 +78,7 @@ export default function LoginPage() {
         }
         localStorage.setItem("currentUser", data.username || email);
         localStorage.setItem("currentUserName", data.name || "");
+        localStorage.setItem("currentUserRole", data.role || "user");
         showToast("Logged in successfully! Welcome back.", "success");
         router.push("/dashboard");
       } else {
@@ -112,7 +114,7 @@ export default function LoginPage() {
               <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: 7 }} />{error}
             </div>}
 
-          <form onSubmit={handleLogin} style={{ width: "100%" }}>
+          <form onSubmit={handleLogin} style={{ width: "100%" }} autoComplete="off">
             {
     /* Username */
   }
@@ -126,7 +128,7 @@ export default function LoginPage() {
     value={email}
     onChange={(e) => setEmail(e.target.value)}
     style={styles.input}
-    autoComplete="username"
+    autoComplete="off"
   />
               </div>
             </div>
@@ -144,7 +146,7 @@ export default function LoginPage() {
     value={password}
     onChange={(e) => setPassword(e.target.value)}
     style={{ ...styles.input, paddingRight: 44 }}
-    autoComplete="current-password"
+    autoComplete="new-password"
   />
                 <button
     type="button"

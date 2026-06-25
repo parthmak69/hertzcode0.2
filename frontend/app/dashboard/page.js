@@ -113,6 +113,7 @@ export default function DatabaseListPage() {
         const merged = serverDbs.map((db) => ({
           id: db.name,
           name: db.name,
+          owner: db.owner,
           tables: []
         }));
         for (const localDb of localDbs) {
@@ -132,6 +133,7 @@ export default function DatabaseListPage() {
   };
   useEffect(() => {
     const user = localStorage.getItem("currentUser") || localStorage.getItem("rememberedEmail") || "";
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentUser(user);
     if (user) {
       fetchDatabases(user);
@@ -246,7 +248,7 @@ export default function DatabaseListPage() {
             <button
     onClick={() => {
       setIsDbModalOpen(true);
-      setDbTypeStep("select");
+      setDbTypeStep("sql");
     }}
     style={{ backgroundColor: "#3b82f6", color: "white", border: "none", padding: "8px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: "bold", boxShadow: "0 4px 6px rgba(59, 130, 246, 0.2)" }}
   >
@@ -257,54 +259,9 @@ export default function DatabaseListPage() {
           {
     /* Database Tabs */
   }
-          <div style={{ display: "flex", borderBottom: "1px solid var(--border-color)", marginBottom: "20px", gap: "8px" }}>
-            <button
-    onClick={() => setActiveTab("mysql")}
-    style={{
-      padding: "10px 20px",
-      border: "none",
-      background: "none",
-      borderBottom: activeTab === "mysql" ? "3px solid #3b82f6" : "3px solid transparent",
-      color: activeTab === "mysql" ? "var(--text-primary)" : "var(--text-muted)",
-      fontWeight: "bold",
-      cursor: "pointer",
-      fontSize: "14px",
-      transition: "all 0.15s",
-      display: "flex",
-      alignItems: "center",
-      gap: "8px"
-    }}
-  >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <ellipse cx="12" cy="5" rx="9" ry="3" />
-                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-                <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
-              </svg>
-              MySQL Databases ({databases.filter((db) => !db.name.startsWith("mongodb:")).length})
-            </button>
-            <button
-    onClick={() => setActiveTab("mongodb")}
-    style={{
-      padding: "10px 20px",
-      border: "none",
-      background: "none",
-      borderBottom: activeTab === "mongodb" ? "3px solid #10b981" : "3px solid transparent",
-      color: activeTab === "mongodb" ? "var(--text-primary)" : "var(--text-muted)",
-      fontWeight: "bold",
-      cursor: "pointer",
-      fontSize: "14px",
-      transition: "all 0.15s",
-      display: "flex",
-      alignItems: "center",
-      gap: "8px"
-    }}
-  >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-              </svg>
-              MongoDB Databases ({databases.filter((db) => db.name.startsWith("mongodb:")).length})
-            </button>
-          </div>
+          <h2 style={{ fontSize: "16px", fontWeight: "600", color: "var(--text-muted)", marginBottom: "20px" }}>
+            MySQL / SQL Databases ({databases.filter((db) => !db.name.startsWith("mongodb:")).length})
+          </h2>
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", fontSize: "14px", color: "var(--text-muted)" }}>
             <div>
@@ -327,22 +284,21 @@ export default function DatabaseListPage() {
                 <tr style={{ borderBottom: "2px solid var(--border-color)", backgroundColor: "var(--bg-tertiary)" }}>
                   <th style={{ padding: "14px 16px", color: "var(--text-secondary)", fontWeight: 600, width: "80px" }}>Sr</th>
                   <th style={{ padding: "14px 16px", color: "var(--text-secondary)", fontWeight: 600 }}>Database Name</th>
+                  <th style={{ padding: "14px 16px", color: "var(--text-secondary)", fontWeight: 600, width: "120px" }}>Username</th>
                   <th style={{ padding: "14px 16px", color: "var(--text-secondary)", fontWeight: 600, width: "180px" }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {databases.filter((db) => {
     const matchesSearch = db.name.toLowerCase().includes(dbSearchQuery.toLowerCase());
-    const matchesTab = activeTab === "mongodb" ? db.name.startsWith("mongodb:") : !db.name.startsWith("mongodb:");
-    return matchesSearch && matchesTab;
+    return matchesSearch && !db.name.startsWith("mongodb:");
   }).length === 0 ? <tr>
-                    <td colSpan={3} style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>
-                      No {activeTab === "mongodb" ? "MongoDB" : "MySQL"} databases found. Click "Create Database" to start!
+                    <td colSpan={4} style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>
+                      No SQL databases found. Click &quot;Create Database&quot; to start!
                     </td>
                   </tr> : databases.filter((db) => {
     const matchesSearch = db.name.toLowerCase().includes(dbSearchQuery.toLowerCase());
-    const matchesTab = activeTab === "mongodb" ? db.name.startsWith("mongodb:") : !db.name.startsWith("mongodb:");
-    return matchesSearch && matchesTab;
+    return matchesSearch && !db.name.startsWith("mongodb:");
   }).map((db, idx) => <tr key={db.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
                         <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{idx + 1}</td>
                         <td style={{ padding: "14px 16px" }}>
@@ -352,6 +308,9 @@ export default function DatabaseListPage() {
   >
                             {db.name.startsWith("mongodb:") ? db.name.replace("mongodb:", "") : db.name}
                           </button>
+                        </td>
+                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>
+                          {db.owner || currentUser}
                         </td>
                         <td style={{ padding: "14px 16px" }}>
                           <div style={{ display: "flex", gap: "8px" }}>
@@ -380,101 +339,16 @@ export default function DatabaseListPage() {
           <div style={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "8px", width: "720px", maxWidth: "90vw", boxShadow: "var(--shadow-lg)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 24px", borderBottom: "1px solid var(--border-color)" }}>
               <h3 style={{ fontWeight: "bold", fontSize: "16px", color: "var(--text-primary)" }}>
-                {dbTypeStep === "select" ? "Create Database" : dbTypeStep === "sql" ? "Create SQL Database" : "Create MongoDB Database"}
+                Create SQL Database
               </h3>
               <button onClick={() => setIsDbModalOpen(false)} style={{ background: "none", border: "none", fontSize: "18px", cursor: "pointer", color: "var(--text-muted)" }}>✕</button>
             </div>
 
-            {dbTypeStep === "select" ? <div style={{ padding: "32px 24px", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
-                <h4 style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-secondary)", margin: 0 }}>Select Database Engine</h4>
-                <div style={{ display: "flex", gap: "20px", width: "100%" }}>
-                  {
-    /* SQL Card */
-  }
-                  <div
-    onClick={() => setDbTypeStep("sql")}
-    style={{
-      flex: 1,
-      padding: "24px",
-      border: "2px solid #3b82f6",
-      borderRadius: "12px",
-      cursor: "pointer",
-      backgroundColor: "rgba(59, 130, 246, 0.04)",
-      transition: "all 0.2s",
-      textAlign: "center",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      gap: "12px",
-      boxShadow: "var(--shadow-sm)"
-    }}
-    onMouseOver={(e) => {
-      e.currentTarget.style.transform = "translateY(-2px)";
-      e.currentTarget.style.boxShadow = "0 8px 16px rgba(59, 130, 246, 0.15)";
-    }}
-    onMouseOut={(e) => {
-      e.currentTarget.style.transform = "none";
-      e.currentTarget.style.boxShadow = "var(--shadow-sm)";
-    }}
-  >
-                    <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "#3b82f6", display: "flex", alignItems: "center", justifyContent: "center", color: "white" }}>
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <ellipse cx="12" cy="5" rx="9" ry="3" />
-                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-                        <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
-                      </svg>
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: "bold", fontSize: "16px", color: "var(--text-primary)", marginBottom: "4px" }}>SQL Database</div>
-                      <div style={{ fontSize: "13px", color: "var(--text-muted)", lineHeight: "1.4" }}>Create a relational MySQL database with customizable tables.</div>
-                    </div>
-                  </div>
-
-                  {
-    /* MongoDB Card */
-  }
-                  <div
-    onClick={() => setDbTypeStep("mongo")}
-    style={{
-      flex: 1,
-      padding: "24px",
-      border: "2px solid #10b981",
-      borderRadius: "12px",
-      cursor: "pointer",
-      backgroundColor: "rgba(16, 185, 129, 0.04)",
-      transition: "all 0.2s",
-      textAlign: "center",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      gap: "12px",
-      boxShadow: "var(--shadow-sm)"
-    }}
-    onMouseOver={(e) => {
-      e.currentTarget.style.transform = "translateY(-2px)";
-      e.currentTarget.style.boxShadow = "0 8px 16px rgba(16, 185, 129, 0.15)";
-    }}
-    onMouseOut={(e) => {
-      e.currentTarget.style.transform = "none";
-      e.currentTarget.style.boxShadow = "var(--shadow-sm)";
-    }}
-  >
-                    <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "#10b981", display: "flex", alignItems: "center", justifyContent: "center", color: "white" }}>
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                      </svg>
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: "bold", fontSize: "16px", color: "var(--text-primary)", marginBottom: "4px" }}>MongoDB</div>
-                      <div style={{ fontSize: "13px", color: "var(--text-muted)", lineHeight: "1.4" }}>Create a NoSQL document database hosted on your cluster.</div>
-                    </div>
-                  </div>
-                </div>
-              </div> : <form onSubmit={handleSaveDatabase}>
-                <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "18px" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <label style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-muted)" }}>Database Name:</label>
-                    <input
+            <form onSubmit={handleSaveDatabase}>
+              <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "18px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-muted)" }}>Database Name:</label>
+                  <input
     type="text"
     placeholder="ecommerce"
     required
@@ -482,30 +356,30 @@ export default function DatabaseListPage() {
     onChange={(e) => setNewDbName(e.target.value.toLowerCase().replace(/\s+/g, "_"))}
     style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none" }}
   />
-                  </div>
+                </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    <label style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-muted)" }}>
-                      {dbTypeStep === "sql" ? "Add Quick Tables:" : "Add Quick Collections:"}
-                    </label>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", border: "1px solid var(--border-color)", borderRadius: "6px", padding: "14px" }}>
-                      {QUICK_TABLE_OPTIONS.map((opt) => <label key={opt.id} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px", color: "var(--text-primary)" }}>
-                          <input
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <label style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-muted)" }}>
+                    Add Quick Tables:
+                  </label>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", border: "1px solid var(--border-color)", borderRadius: "6px", padding: "14px" }}>
+                    {QUICK_TABLE_OPTIONS.map((opt) => <label key={opt.id} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px", color: "var(--text-primary)" }}>
+                        <input
     type="checkbox"
     checked={selectedQuickTables.includes(opt.id)}
     onChange={() => toggleQuickTable(opt.id)}
   />
-                          {opt.name}
-                        </label>)}
-                    </div>
+                        {opt.name}
+                      </label>)}
                   </div>
                 </div>
-                
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", padding: "16px 24px", borderTop: "1px solid var(--border-color)" }}>
-                  <button type="button" onClick={() => setDbTypeStep("select")} style={{ padding: "8px 16px", borderRadius: "6px", border: "1px solid var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", cursor: "pointer", fontSize: "14px" }}>Back</button>
-                  <button type="submit" style={{ padding: "8px 16px", borderRadius: "6px", border: "none", backgroundColor: dbTypeStep === "sql" ? "#3b82f6" : "#10b981", color: "white", cursor: "pointer", fontSize: "14px", fontWeight: "bold" }}>Save changes</button>
-                </div>
-              </form>}
+              </div>
+              
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", padding: "16px 24px", borderTop: "1px solid var(--border-color)" }}>
+                <button type="button" onClick={() => setIsDbModalOpen(false)} style={{ padding: "8px 16px", borderRadius: "6px", border: "1px solid var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", cursor: "pointer", fontSize: "14px" }}>Cancel</button>
+                <button type="submit" style={{ padding: "8px 16px", borderRadius: "6px", border: "none", backgroundColor: "#3b82f6", color: "white", cursor: "pointer", fontSize: "14px", fontWeight: "bold" }}>Save changes</button>
+              </div>
+            </form>
           </div>
         </div>}
       {

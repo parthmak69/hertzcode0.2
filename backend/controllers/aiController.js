@@ -12,9 +12,6 @@ export const generateSql = async (req, res) => {
       return res.status(500).json({ error: "Gemini API key is not configured in .env" });
     }
 
-    const decodedDbName = dbName ? decodeURIComponent(dbName) : "";
-    const isMongo = decodedDbName && decodedDbName.startsWith("mongodb:");
-
     let promptText = `You are an expert SQL assistant. Generate clean, valid MySQL queries based on the user's prompt. 
 You MUST adhere strictly to standard MySQL syntax rules:
 1. Use \`AUTO_INCREMENT\` (with underscore, NOT \`AUTOINCREMENT\`) for auto-incrementing primary keys.
@@ -26,17 +23,6 @@ Current Database Context/Tables (if any):
 ${schemaContext || "No existing tables."}
 
 User Prompt: "${prompt}"`;
-
-    if (isMongo) {
-      promptText = `You are an expert MongoDB schema assistant. Based on the user's prompt, generate a sample JSON document structure for a collection.
-You MUST output ONLY a valid raw JSON object. Do NOT wrap the JSON in markdown code blocks (like \`\`\`json) or write any extra conversational text.
-
-The JSON object structure must have exactly two fields:
-1. "collectionName": string (lowercase, using underscores for spaces, e.g. "order_details").
-2. "document": object (a sample document containing relevant fields with mock values, e.g. {"product_id": 101, "quantity": 5}).
-
-User Prompt: "${prompt}"`;
-    }
 
     // Call dynamic generative language model endpoints
     const modelName = "gemini-2.5-flash-lite";

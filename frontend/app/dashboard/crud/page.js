@@ -2,6 +2,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getProjectsForUser, saveProjectsForUser } from "../../utils/projectStorage";
 export default function CrudProjectsListPage() {
   const [projects, setProjects] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -14,16 +15,17 @@ export default function CrudProjectsListPage() {
   const router = useRouter();
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState(null);
+  const [currentUser, setCurrentUser] = useState("");
+  const [userRole, setUserRole] = useState("user");
   useEffect(() => {
-    const stored = localStorage.getItem("crudProjects");
-    if (stored) {
-      try {
-        setProjects(JSON.parse(stored));
-      } catch (e) {
-        console.error("Failed to parse crudProjects", e);
-      }
-    }
     const user = localStorage.getItem("currentUser") || localStorage.getItem("rememberedEmail") || "";
+    const role = localStorage.getItem("currentUserRole") || "user";
+    setCurrentUser(user);
+    setUserRole(role);
+
+    const list = getProjectsForUser(user, role);
+    setProjects(list);
+
     if (user) {
       fetch(`/api/database/list?username=${encodeURIComponent(user)}`).then((res) => res.json()).then((data) => {
         if (data.success && data.databases) {
@@ -38,7 +40,7 @@ export default function CrudProjectsListPage() {
   }, []);
   const saveProjects = (newProjects) => {
     setProjects(newProjects);
-    localStorage.setItem("crudProjects", JSON.stringify(newProjects));
+    saveProjectsForUser(newProjects, currentUser, userRole);
   };
   const handleCreateProject = (e) => {
     e.preventDefault();
@@ -50,6 +52,7 @@ export default function CrudProjectsListPage() {
       directory: directory || `C:/CRUD/${formattedProjName}`,
       databaseName,
       connectFolder,
+      owner: currentUser,
       files: []
     };
     saveProjects([...projects, newProject]);
@@ -65,7 +68,12 @@ export default function CrudProjectsListPage() {
   };
   const handleDeleteProject = () => {
     if (!projectToDelete) return;
-    const updated = projects.filter((p) => p.id !== projectToDelete.id);
+    const updated = projects.map((p) => {
+      if (p.id === projectToDelete.id) {
+        return { ...p, isDeleted: true, deletedAt: Date.now() };
+      }
+      return p;
+    });
     saveProjects(updated);
     setIsDeleteModalOpen(false);
     setProjectToDelete(null);
@@ -120,9 +128,9 @@ export default function CrudProjectsListPage() {
                 </tr>
               </thead>
               <tbody>
-                {projects.length === 0 ? <tr>
+                {projects.filter((p) => !p.isDeleted).length === 0 ? <tr>
                     <td colSpan={5} style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>No CRUD projects found. Click &quot;Create Project&quot; to start!</td>
-                  </tr> : projects.filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase())).map((p, idx) => <tr key={p.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
+                  </tr> : projects.filter((p) => !p.isDeleted && p.name.toLowerCase().includes(searchQuery.toLowerCase())).map((p, idx) => <tr key={p.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
                         <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{idx + 1}</td>
                         <td style={{ padding: "14px 16px" }}>
                           <button

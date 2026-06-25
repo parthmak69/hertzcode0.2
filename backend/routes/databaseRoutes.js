@@ -17,14 +17,28 @@ import {
 } from "../controllers/tableController.js";
 
 import { runQuery } from "../controllers/queryController.js";
+import {
+  listRecycledItems,
+  restoreItem,
+  permanentDeleteItem
+} from "../controllers/recycleBinController.js";
+import { checkDatabaseAccess } from "../middleware/dbAccess.js";
 
 const router = express.Router();
+
+// Apply database ownership verification middleware
+router.use(checkDatabaseAccess);
 
 // Database Level
 router.get("/list", listDatabases);
 router.post("/create", createDatabase);
 router.delete("/delete", deleteDatabase);
 router.post("/query", runQuery);
+
+// Recycle Bin Level
+router.get("/recycle-bin/list", listRecycledItems);
+router.post("/recycle-bin/restore", restoreItem);
+router.post("/recycle-bin/permanent-delete", permanentDeleteItem);
 
 // Table Structure Level
 router.get("/tables", listTables);

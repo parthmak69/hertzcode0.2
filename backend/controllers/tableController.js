@@ -42,6 +42,7 @@ export const listTables = async (req, res) => {
 
       for (const colInfo of collectionsList) {
         const colName = colInfo.name;
+        if (colName.startsWith("_recycled_")) continue;
         const count = await db.collection(colName).countDocuments();
         const sample = await db.collection(colName).findOne();
 
@@ -95,6 +96,7 @@ export const listTables = async (req, res) => {
 
       for (const row of tablesList) {
         const tableName = Object.values(row)[0];
+        if (tableName.startsWith("_recycled_")) continue;
 
         const [countResult] = await connection.query(`SELECT COUNT(*) as cnt FROM \`${tableName}\``);
         const entriesCount = countResult[0]?.cnt || 0;
@@ -213,7 +215,11 @@ export const createTable = async (req, res) => {
             stmt += " DEFAULT NULL";
           } else if (col.defaultValue === "CURRENT_TIMESTAMP") {
             stmt += " DEFAULT CURRENT_TIMESTAMP";
-          } else if (col.defaultValue && col.defaultValue !== "As Defined") {
+          } else if (col.defaultValue === "As Defined") {
+            if (col.customDefaultValue !== undefined && col.customDefaultValue !== null) {
+              stmt += ` DEFAULT '${col.customDefaultValue}'`;
+            }
+          } else if (col.defaultValue) {
             stmt += ` DEFAULT '${col.defaultValue}'`;
           }
 
@@ -256,11 +262,10 @@ export const createTable = async (req, res) => {
   }
 };
 
-// ==================== 3. DELETE TABLE / COLLECTION ====================
 export const deleteTable = async (req, res) => {
   let connection;
   try {
-    const { dbName, tableName } = req.body;
+    const { dbName, tableName, username } = req.body;
 
     if (!dbName || !tableName) {
       return res.status(400).json({ success: false, error: "Database name and table name are required." });
@@ -268,16 +273,19 @@ export const deleteTable = async (req, res) => {
 
     const isMongo = dbName.startsWith("mongodb:");
     const mongoDbRealName = isMongo ? dbName.replace("mongodb:", "") : dbName;
+    const cleanTableName = tableName.trim().toLowerCase();
 
-    if (!validateName(mongoDbRealName) || !validateName(tableName)) {
+    if (!validateName(mongoDbRealName) || !validateName(cleanTableName)) {
       return res.status(400).json({ success: false, error: "Invalid database or table name." });
     }
+
+    const recycledPhysName = `_recycled_${cleanTableName}_${Date.now()}`;
 
     if (isMongo) {
       const client = new MongoClient(getMongoUri());
       await client.connect();
       const db = client.db(mongoDbRealName);
-      await db.collection(tableName.trim().toLowerCase()).drop();
+      await db.collection(cleanTableName).rename(recycledPhysName);
       await client.close();
     } else {
       connection = await mysql.createConnection({
@@ -285,9 +293,33 @@ export const deleteTable = async (req, res) => {
         database: dbName,
       });
 
-      await connection.execute(`DROP TABLE IF EXISTS \`${tableName.trim().toLowerCase()}\``);
+      await connection.execute(`RENAME TABLE \`${cleanTableName}\` TO \`${recycledPhysName}\``);
       await connection.end();
+      connection = null;
     }
+
+    // Insert record into recycled_items meta database
+    const metaConn = await mysql.createConnection({
+      ...getDbConfig(),
+      database: process.env.DB_NAME || "admin",
+    });
+    // Auto-create recycled_items if not exists
+    await metaConn.execute(`
+      CREATE TABLE IF NOT EXISTS \`recycled_items\` (
+        \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+        \`item_type\` VARCHAR(50) NOT NULL,
+        \`item_name\` VARCHAR(100) NOT NULL,
+        \`original_owner\` VARCHAR(100) NOT NULL,
+        \`parent_context\` VARCHAR(100) DEFAULT '',
+        \`metadata\` LONGTEXT DEFAULT NULL,
+        \`deleted_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await metaConn.execute(
+      "INSERT INTO recycled_items (item_type, item_name, original_owner, parent_context, metadata) VALUES (?, ?, ?, ?, ?)",
+      ["table", tableName, username || "unknown", dbName, JSON.stringify({ isMongo, physicalName: recycledPhysName })]
+    );
+    await metaConn.end();
 
     return res.json({ success: true });
   } catch (err) {
@@ -295,7 +327,7 @@ export const deleteTable = async (req, res) => {
       try { await connection.end(); } catch (e) {}
     }
     console.error("Delete Table Error:", err);
-    return res.status(500).json({ success: false, error: "Failed to drop table/collection: " + err.message });
+    return res.status(500).json({ success: false, error: "Failed to soft-delete table/collection: " + err.message });
   }
 };
 

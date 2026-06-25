@@ -42,6 +42,15 @@
   --danger: #f87171;
 }
 
+html, body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+}
+
 /* Hide default browser scrollbars / sliders */
 ::-webkit-scrollbar {
   display: none;
@@ -49,6 +58,19 @@
 * {
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
+}
+
+/* Ensure form elements respect light/dark themes */
+select, input, textarea {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  outline: none;
+}
+
+select option {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 /* Toast Notification System Styles */

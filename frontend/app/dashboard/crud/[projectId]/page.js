@@ -2,12 +2,15 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { getProjectsForUser, saveProjectsForUser } from "../../utils/projectStorage";
 export default function CrudFilesListPage() {
   const router = useRouter();
   const params = useParams();
   const projectId = params?.projectId;
   const [project, setProject] = useState(null);
   const [allProjects, setAllProjects] = useState([]);
+  const [currentUser, setCurrentUser] = useState("");
+  const [userRole, setUserRole] = useState("user");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [fileName, setFileName] = useState("");
@@ -30,20 +33,18 @@ export default function CrudFilesListPage() {
     }
   };
   useEffect(() => {
-    const stored = localStorage.getItem("crudProjects");
-    if (stored) {
-      try {
-        const projs = JSON.parse(stored);
-        setAllProjects(projs);
-        const found = projs.find((p) => p.id === projectId);
-        if (found) {
-          setProject(found);
-          if (found.databaseName) {
-            fetchAvailableTables(found.databaseName);
-          }
-        }
-      } catch (e) {
-        console.error("Failed to parse crudProjects", e);
+    const user = localStorage.getItem("currentUser") || "";
+    const role = localStorage.getItem("currentUserRole") || "user";
+    setCurrentUser(user);
+    setUserRole(role);
+
+    const projs = getProjectsForUser(user, role);
+    setAllProjects(projs);
+    const found = projs.find((p) => p.id === projectId);
+    if (found) {
+      setProject(found);
+      if (found.databaseName) {
+        fetchAvailableTables(found.databaseName);
       }
     }
   }, [projectId]);
@@ -118,7 +119,7 @@ export default function CrudFilesListPage() {
     const updatedProjectsList = allProjects.map((p) => p.id === projectId ? updatedProject : p);
     setProject(updatedProject);
     setAllProjects(updatedProjectsList);
-    localStorage.setItem("crudProjects", JSON.stringify(updatedProjectsList));
+    saveProjectsForUser(updatedProjectsList, currentUser, userRole);
     setIsModalOpen(false);
     setFileName("");
     setTableName("");
@@ -130,12 +131,17 @@ export default function CrudFilesListPage() {
   };
   const handleDeleteFile = () => {
     if (!project || !fileToDelete) return;
-    const updatedFiles = project.files.filter((f) => f.id !== fileToDelete.id);
+    const updatedFiles = project.files.map((f) => {
+      if (f.id === fileToDelete.id) {
+        return { ...f, isDeleted: true, deletedAt: Date.now() };
+      }
+      return f;
+    });
     const updatedProject = { ...project, files: updatedFiles };
     const updatedProjectsList = allProjects.map((p) => p.id === projectId ? updatedProject : p);
     setProject(updatedProject);
     setAllProjects(updatedProjectsList);
-    localStorage.setItem("crudProjects", JSON.stringify(updatedProjectsList));
+    saveProjectsForUser(updatedProjectsList, currentUser, userRole);
     setIsDeleteModalOpen(false);
     setFileToDelete(null);
   };
@@ -207,11 +213,11 @@ export default function CrudFilesListPage() {
                 </tr>
               </thead>
               <tbody>
-                {!project.files || project.files.length === 0 ? <tr>
+                {!project.files || project.files.filter((f) => !f.isDeleted).length === 0 ? <tr>
                     <td colSpan={5} style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>
                       No files created yet. Click &quot;Add CRUD File&quot; to start!
                     </td>
-                  </tr> : project.files.filter((file) => file.name.toLowerCase().includes(searchQuery.toLowerCase())).map((file, idx) => <tr key={file.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
+                  </tr> : project.files.filter((file) => !file.isDeleted && file.name.toLowerCase().includes(searchQuery.toLowerCase())).map((file, idx) => <tr key={file.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
                         <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{idx + 1}</td>
                         <td style={{ padding: "14px 16px" }}>
                           <button

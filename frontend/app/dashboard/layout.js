@@ -16,6 +16,16 @@ const CrudIcon = ({ active }) => <svg width="18" height="18" viewBox="0 0 24 24"
     <line x1="16" y1="17" x2="8" y2="17" />
     <polyline points="10 9 9 9 8 9" />
   </svg>;
+const TrashIcon = ({ active }) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: active ? "#ffffff" : "rgba(255,255,255,0.7)" }}>
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </svg>;
+const AdminIcon = ({ active }) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: active ? "#ffffff" : "rgba(255,255,255,0.7)" }}>
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>;
 export default function DashboardLayout({ children }) {
   const { showToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -23,20 +33,54 @@ export default function DashboardLayout({ children }) {
   const [logoSrc, setLogoSrc] = useState("/logo.png");
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [userNameLetter, setUserNameLetter] = useState("A");
+  const [userRole, setUserRole] = useState("user");
   const [authorized, setAuthorized] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const handleSignOut = () => {
     localStorage.removeItem("currentUser");
+    localStorage.removeItem("currentUserName");
+    localStorage.removeItem("currentUserRole");
+    localStorage.removeItem("rememberedEmail");
+    localStorage.removeItem("rememberMe");
     showToast("Logged out successfully", "success");
     router.push("/");
   };
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    window.fetch = async function (url, options = {}) {
+      const user = localStorage.getItem("currentUser") || "";
+      if (user && typeof url === "string" && url.includes("/api/")) {
+        options.headers = {
+          ...options.headers,
+          "x-user-username": user,
+        };
+      }
+      return originalFetch(url, options);
+    };
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
+
   useEffect(() => {
     const user = localStorage.getItem("currentUser");
     if (!user) {
       router.push("/");
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAuthorized(true);
+      const storedRole = localStorage.getItem("currentUserRole") || "user";
+      setUserRole(storedRole);
+      
+      // Page Guard: restrict recycle-bin and admin subroutes for normal users
+      if (storedRole !== "admin") {
+        if (pathname === "/dashboard/recycle-bin" || pathname.startsWith("/dashboard/admin")) {
+          showToast("Access denied. Only administrators can access this page.", "error");
+          router.push("/dashboard");
+          return;
+        }
+      }
     }
     const savedTheme = localStorage.getItem("theme") || "light";
     document.documentElement.setAttribute("data-theme", savedTheme);
@@ -45,7 +89,8 @@ export default function DashboardLayout({ children }) {
     if (storedName) {
       setUserNameLetter(storedName.trim().charAt(0) || "A");
     }
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router, pathname]);
   const toggleTheme = () => {
     const nextDark = !isDark;
     setIsDark(nextDark);
@@ -79,6 +124,8 @@ export default function DashboardLayout({ children }) {
   }, []);
   const isDbActive = pathname === "/dashboard" || pathname.startsWith("/dashboard/db");
   const isCrudActive = pathname.startsWith("/dashboard/crud");
+  const isRecycleActive = pathname === "/dashboard/recycle-bin";
+  const isAdminActive = pathname.startsWith("/dashboard/admin");
   const isPortal = pathname?.includes("/admin-portal");
   if (!authorized) {
     return <div style={{ display: "flex", height: "100vh", width: "100vw", alignItems: "center", justifyContent: "center", fontFamily: "sans-serif", backgroundColor: "#fafbfd", color: "#0f172a" }}>
@@ -293,6 +340,58 @@ export default function DashboardLayout({ children }) {
   >
               <CrudIcon active={isCrudActive} /> CRUD Builder
             </Link>
+
+            {userRole === "admin" && (
+              <Link
+                href="/dashboard/recycle-bin"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  padding: "14px 18px",
+                  border: "none",
+                  borderRadius: "8px",
+                  width: "100%",
+                  textDecoration: "none",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  background: isRecycleActive ? "rgba(255, 255, 255, 0.18)" : "transparent",
+                  color: "#ffffff",
+                  fontWeight: isRecycleActive ? "700" : "500",
+                  fontFamily: "'Segoe UI', sans-serif",
+                  transition: "all 0.2s",
+                  boxShadow: isRecycleActive ? "0 4px 12px rgba(255, 255, 255, 0.2)" : "none"
+                }}
+              >
+                <TrashIcon active={isRecycleActive} /> Recycle Bin
+              </Link>
+            )}
+
+            {userRole === "admin" && (
+              <Link
+                href="/dashboard/admin"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  padding: "14px 18px",
+                  border: "none",
+                  borderRadius: "8px",
+                  width: "100%",
+                  textDecoration: "none",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  background: isAdminActive ? "rgba(255, 255, 255, 0.18)" : "transparent",
+                  color: "#ffffff",
+                  fontWeight: isAdminActive ? "700" : "500",
+                  fontFamily: "'Segoe UI', sans-serif",
+                  transition: "all 0.2s",
+                  boxShadow: isAdminActive ? "0 4px 12px rgba(255, 255, 255, 0.2)" : "none"
+                }}
+              >
+                <AdminIcon active={isAdminActive} /> Admin Panel
+              </Link>
+            )}
           </nav>
         </aside>
 

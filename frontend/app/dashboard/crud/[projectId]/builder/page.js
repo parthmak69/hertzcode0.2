@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useToast } from "../../../../context/ToastContext";
+import { getProjectsForUser } from "../../../../utils/projectStorage";
 export default function AdvancedCrudBuilder() {
   const { showToast } = useToast();
   const router = useRouter();
@@ -16,18 +17,13 @@ export default function AdvancedCrudBuilder() {
   const [selectedFieldName, setSelectedFieldName] = useState("");
   const [activeTab, setActiveTab] = useState("List");
   useEffect(() => {
-    const stored = localStorage.getItem("crudProjects");
-    if (stored) {
-      try {
-        const projs = JSON.parse(stored);
-        const foundProj = projs.find((p) => p.id === projectId);
-        if (foundProj) {
-          setProject(foundProj);
-          fetchDatabaseTables(foundProj.databaseName);
-        }
-      } catch (e) {
-        console.error("Failed to parse projects", e);
-      }
+    const user = localStorage.getItem("currentUser") || "";
+    const role = localStorage.getItem("currentUserRole") || "user";
+    const projs = getProjectsForUser(user, role);
+    const foundProj = projs.find((p) => p.id === projectId);
+    if (foundProj) {
+      setProject(foundProj);
+      fetchDatabaseTables(foundProj.databaseName);
     }
   }, [projectId]);
   const fetchDatabaseTables = async (dbName) => {
