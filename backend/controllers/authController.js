@@ -57,6 +57,22 @@ export const login = async (req, res) => {
       )
     `);
 
+    // Auto-create hertz_projects table if it doesn't exist
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS \`hertz_projects\` (
+        \`id\` VARCHAR(50) PRIMARY KEY,
+        \`name\` VARCHAR(100) NOT NULL,
+        \`directory\` VARCHAR(255) NOT NULL,
+        \`databaseName\` VARCHAR(100) DEFAULT '',
+        \`connectFolder\` VARCHAR(50) DEFAULT 'lib',
+        \`owner\` VARCHAR(100) NOT NULL,
+        \`files\` LONGTEXT DEFAULT NULL,
+        \`isDeleted\` TINYINT(1) DEFAULT 0,
+        \`deletedAt\` BIGINT DEFAULT NULL,
+        \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // If table is empty, insert default admin user
     const [userRows] = await connection.query("SELECT COUNT(*) as count FROM user_cred");
     if (userRows[0].count === 0) {
@@ -237,6 +253,146 @@ export const createUser = async (req, res) => {
       try { await connection.end(); } catch (e) {}
     }
     console.error("Create User Error:", err);
+    return res.status(500).json({ success: false, error: "Database error: " + err.message });
+  }
+};
+
+
+//Delete User
+export const deleteUser = async (req, res) =>{
+  let connection;
+
+  try {
+    const id = req.params.id || req.query.id || req.body.id;
+    const requester = req.query.requester || req.body.requester;
+    
+    if (!id || !requester) {
+      return res.status(400).json({ success: false, error: "User ID and Requester username are required." });
+    }
+
+    const dbName = process.env.DB_NAME || "admin";
+    connection = await mysql.createConnection({
+      ...getDbConfig(),
+      database: dbName,
+    });
+
+    const [reqRows] = await connection.execute(
+      "SELECT role FROM user_cred WHERE username = ? LIMIT 1", [requester]
+    );
+
+    if (reqRows.length === 0 || reqRows[0].role !== "admin") {
+      await connection.end();
+      return res.status(403).json({success: false, error: "Access Denied. Admin role required."})
+    }
+
+    const [targetRows] = await connection.execute(
+      "SELECT username FROM user_cred WHERE id = ? LIMIT 1",[id]
+    );
+    if(targetRows.length > 0 && targetRows[0].username === requester){
+      await connection.end();
+      return res.status(400).json({success: false, error: "Cannot delete your own account."})
+    }
+
+    await connection.execute(
+      "DELETE FROM user_cred WHERE id = ?",[id]
+    );
+
+    await connection.end();
+    return res.json({success: true});
+  } catch (error) {
+    if (connection) {
+      try { await connection.end(); } catch (e) {}
+    }
+    console.error("Delete User Error:", error);
+    return res.status(500).json({success: false, error: "Database error: " + error.message });
+  }
+}
+
+// Update User
+export const updateUser = async (req, res) => {
+  let connection;
+  try {
+    const { id, username, password, name, role, requester } = req.body;
+
+    if (!requester) {
+      return res.status(400).json({ success: false, error: "Requester username is required." });
+    }
+    if (!id) {
+      return res.status(400).json({ success: false, error: "User ID is required." });
+    }
+
+    const dbName = process.env.DB_NAME || "admin";
+    connection = await mysql.createConnection({
+      ...getDbConfig(),
+      database: dbName,
+    });
+
+    // Check requester role
+    const [reqRows] = await connection.execute(
+      "SELECT role FROM user_cred WHERE username = ? LIMIT 1",
+      [requester]
+    );
+    if (reqRows.length === 0 || reqRows[0].role !== "admin") {
+      await connection.end();
+      return res.status(403).json({ success: false, error: "Access denied. Admin role required." });
+    }
+
+    // Check if target user exists
+    const [targetRows] = await connection.execute(
+      "SELECT * FROM user_cred WHERE id = ? LIMIT 1",
+      [id]
+    );
+    if (targetRows.length === 0) {
+      await connection.end();
+      return res.status(404).json({ success: false, error: "User not found." });
+    }
+
+    const targetUser = targetRows[0];
+
+    // If changing username, check if new username already exists for another user
+    if (username && username !== targetUser.username) {
+      const [existing] = await connection.execute(
+        "SELECT id FROM user_cred WHERE username = ? AND id != ? LIMIT 1",
+        [username, id]
+      );
+      if (existing.length > 0) {
+        await connection.end();
+        return res.status(400).json({ success: false, error: "Username already exists." });
+      }
+    }
+
+    // Prepare update parameters
+    const newUsername = username || targetUser.username;
+    const newName = name !== undefined ? name : targetUser.name;
+    const newRole = role || targetUser.role;
+
+    // Prevent changing own role away from admin (if requester is editing their own user)
+    if (targetUser.username === requester && newRole !== "admin") {
+      await connection.end();
+      return res.status(400).json({ success: false, error: "Cannot revoke your own admin role." });
+    }
+
+    if (password) {
+      // If password is provided, update password too
+      await connection.execute(
+        "UPDATE user_cred SET username = ?, pass_hash = ?, name = ?, role = ? WHERE id = ?",
+        [newUsername, password, newName, newRole, id]
+      );
+    } else {
+      // If no password provided, update without changing password
+      await connection.execute(
+        "UPDATE user_cred SET username = ?, name = ?, role = ? WHERE id = ?",
+        [newUsername, newName, newRole, id]
+      );
+    }
+
+    await connection.end();
+    return res.json({ success: true });
+  } catch (err) {
+    if (connection) {
+      try { await connection.end(); } catch (e) {}
+    }
+    console.error("Update User Error:", err);
     return res.status(500).json({ success: false, error: "Database error: " + err.message });
   }
 };

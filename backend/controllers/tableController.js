@@ -1,13 +1,10 @@
 import mysql from "mysql2/promise";
-import { MongoClient, ObjectId } from "mongodb";
 
 const getDbConfig = () => ({
   host: process.env.DB_HOST || "localhost",
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
 });
-
-const getMongoUri = () => process.env.MONGO_URI || "mongodb://localhost:27017";
 
 // Helper to validate database/table name strings
 const validateName = (name) => {
@@ -25,125 +22,75 @@ export const listTables = async (req, res) => {
       return res.status(400).json({ success: false, error: "dbName parameter is required." });
     }
 
-    const isMongo = dbName.startsWith("mongodb:");
-    const mongoDbRealName = isMongo ? dbName.replace("mongodb:", "") : dbName;
+    if (dbName.startsWith("mongodb:")) {
+      return res.json({ success: true, tables: [] });
+    }
 
-    if (!validateName(mongoDbRealName)) {
+    if (!validateName(dbName)) {
       return res.status(400).json({ success: false, error: "Invalid database name." });
     }
 
     const tables = [];
 
-    if (isMongo) {
-      const client = new MongoClient(getMongoUri());
-      await client.connect();
-      const db = client.db(mongoDbRealName);
-      const collectionsList = await db.listCollections().toArray();
+    connection = await mysql.createConnection({
+      ...getDbConfig(),
+      database: dbName,
+    });
 
-      for (const colInfo of collectionsList) {
-        const colName = colInfo.name;
-        if (colName.startsWith("_recycled_")) continue;
-        const count = await db.collection(colName).countDocuments();
-        const sample = await db.collection(colName).findOne();
+    const [tablesList] = await connection.query("SHOW TABLES");
 
-        const columns = [];
-        if (sample) {
-          for (const [key, value] of Object.entries(sample)) {
-            if (key === "_id") continue;
-            let colType = "VARCHAR";
-            if (typeof value === "number") colType = "INT";
-            else if (value instanceof Date) colType = "DATETIME";
-            else if (typeof value === "boolean") colType = "TINYINT";
+    for (const row of tablesList) {
+      const tableName = Object.values(row)[0];
+      if (tableName.startsWith("_recycled_")) continue;
 
-            columns.push({
-              name: key,
-              type: colType,
-              size: "---",
-              index: "---",
-              defaultValue: "NULL",
-              comment: "",
-            });
-          }
-        } else {
-          columns.push({
-            name: "name",
-            type: "VARCHAR",
-            size: "---",
-            index: "---",
-            defaultValue: "NULL",
-            comment: "",
-          });
-        }
+      const [countResult] = await connection.query(`SELECT COUNT(*) as cnt FROM \`${tableName}\``);
+      const entriesCount = countResult[0]?.cnt || 0;
 
-        tables.push({
-          name: colName,
-          entriesCount: count,
-          idOption: true,
-          createdOnOption: false,
-          modifiedOnOption: false,
-          isDeletedOption: false,
-          columns: columns,
-        });
-      }
-      await client.close();
-    } else {
-      connection = await mysql.createConnection({
-        ...getDbConfig(),
-        database: dbName,
+      const [columnsDesc] = await connection.query(`DESCRIBE \`${tableName}\``);
+
+      const columns = columnsDesc.map(col => {
+        const typeMatch = col.Type.match(/^([a-zA-Z]+)(?:\(([^)]+)\))?/);
+        const type = typeMatch ? typeMatch[1].toUpperCase() : col.Type.toUpperCase();
+        const size = typeMatch && typeMatch[2] ? typeMatch[2] : "---";
+
+        return {
+          name: col.Field,
+          type: type,
+          size: size,
+          index: col.Key === "PRI" ? "PRIMARY KEY" : col.Key === "UNI" ? "UNIQUE" : "---",
+          defaultValue: col.Default === null ? "NULL" : col.Default,
+          comment: col.Extra || "",
+        };
       });
 
-      const [tablesList] = await connection.query("SHOW TABLES");
+      const hasId = columns.some(c => c.name === "id" && c.index === "PRIMARY KEY");
+      const hasCreated = columns.some(c => c.name === "created_at" || c.name === "createdOn");
+      const hasModified = columns.some(c => c.name === "updated_at" || c.name === "modifiedOn");
+      const hasDeleted = columns.some(c => c.name === "is_deleted" || c.name === "isDeleted");
 
-      for (const row of tablesList) {
-        const tableName = Object.values(row)[0];
-        if (tableName.startsWith("_recycled_")) continue;
-
-        const [countResult] = await connection.query(`SELECT COUNT(*) as cnt FROM \`${tableName}\``);
-        const entriesCount = countResult[0]?.cnt || 0;
-
-        const [columnsDesc] = await connection.query(`DESCRIBE \`${tableName}\``);
-
-        const columns = columnsDesc.map(col => {
-          const typeMatch = col.Type.match(/^([a-zA-Z]+)(?:\(([^)]+)\))?/);
-          const type = typeMatch ? typeMatch[1].toUpperCase() : col.Type.toUpperCase();
-          const size = typeMatch && typeMatch[2] ? typeMatch[2] : "---";
-
-          return {
-            name: col.Field,
-            type: type,
-            size: size,
-            index: col.Key === "PRI" ? "PRIMARY KEY" : col.Key === "UNI" ? "UNIQUE" : "---",
-            defaultValue: col.Default === null ? "NULL" : col.Default,
-            comment: col.Extra || "",
-          };
-        });
-
-        const hasId = columns.some(c => c.name === "id" && c.index === "PRIMARY KEY");
-        const hasCreated = columns.some(c => c.name === "created_at" || c.name === "createdOn");
-        const hasModified = columns.some(c => c.name === "updated_at" || c.name === "modifiedOn");
-        const hasDeleted = columns.some(c => c.name === "is_deleted" || c.name === "isDeleted");
-
-        tables.push({
-          name: tableName,
-          entriesCount: entriesCount,
-          idOption: hasId,
-          createdOnOption: hasCreated,
-          modifiedOnOption: hasModified,
-          isDeletedOption: hasDeleted,
-          columns: columns.filter(c => !["id", "created_at", "createdOn", "updated_at", "modifiedOn", "is_deleted", "isDeleted"].includes(c.name)),
-        });
-      }
-
-      await connection.end();
+      tables.push({
+        name: tableName,
+        entriesCount: entriesCount,
+        idOption: hasId,
+        createdOnOption: hasCreated,
+        modifiedOnOption: hasModified,
+        isDeletedOption: hasDeleted,
+        columns: columns,
+      });
     }
 
     return res.json({ success: true, tables });
   } catch (err) {
-    if (connection) {
-      try { await connection.end(); } catch (e) {}
+    if (err.code === 'ER_BAD_DB_ERROR') {
+      console.warn(`List Tables Warning: Database '${dbName}' does not exist.`);
+      return res.status(404).json({ success: false, code: 'DB_NOT_FOUND', error: `Database '${dbName}' does not exist.` });
     }
     console.error("List Tables Error:", err);
     return res.status(500).json({ success: false, error: "Failed to inspect tables: " + err.message });
+  } finally {
+    if (connection) {
+      try { await connection.end(); } catch (e) {}
+    }
   }
 };
 
@@ -157,113 +104,89 @@ export const createTable = async (req, res) => {
       return res.status(400).json({ success: false, error: "Database name and table name are required." });
     }
 
-    const isMongo = dbName.startsWith("mongodb:");
-    const mongoDbRealName = isMongo ? dbName.replace("mongodb:", "") : dbName;
+    if (dbName.startsWith("mongodb:")) {
+      return res.status(400).json({ success: false, error: "MongoDB is not supported. SQL databases only." });
+    }
 
-    if (!validateName(mongoDbRealName) || !validateName(tableName)) {
+    if (!validateName(dbName) || !validateName(tableName)) {
       return res.status(400).json({ success: false, error: "Invalid database or table name." });
     }
 
-    if (isMongo) {
-      const client = new MongoClient(getMongoUri());
-      await client.connect();
-      const db = client.db(mongoDbRealName);
+    connection = await mysql.createConnection({
+      ...getDbConfig(),
+      database: dbName,
+    });
 
-      const sampleDoc = {};
-      if (Array.isArray(columns)) {
-        for (const col of columns) {
-          if (!col.name || !col.name.trim()) continue;
-          let defaultVal = "";
-          if (col.type === "INT" || col.type === "TINYINT") defaultVal = 0;
-          else if (col.type === "DATETIME" || col.type === "DATE") defaultVal = new Date();
-          sampleDoc[col.name.trim().toLowerCase()] = defaultVal;
-        }
-      }
+    const columnDefinitions = [];
 
-      if (Object.keys(sampleDoc).length === 0) {
-        sampleDoc["name"] = "Sample";
-      }
-
-      await db.collection(tableName.trim().toLowerCase()).insertOne(sampleDoc);
-      await client.close();
-    } else {
-      connection = await mysql.createConnection({
-        ...getDbConfig(),
-        database: dbName,
-      });
-
-      const columnDefinitions = [];
-
-      if (idOption) {
-        columnDefinitions.push("`id` INT AUTO_INCREMENT PRIMARY KEY");
-      }
-
-      if (Array.isArray(columns)) {
-        for (const col of columns) {
-          if (!col.name || !col.name.trim()) continue;
-
-          let stmt = `\`${col.name.trim().toLowerCase()}\` ${col.type}`;
-          if (col.size && col.size.trim() && col.size !== "---") {
-            stmt += `(${col.size.trim()})`;
-          }
-
-          if (col.index === "UNIQUE") {
-            stmt += " UNIQUE";
-          }
-
-          if (col.defaultValue === "NULL") {
-            stmt += " DEFAULT NULL";
-          } else if (col.defaultValue === "CURRENT_TIMESTAMP") {
-            stmt += " DEFAULT CURRENT_TIMESTAMP";
-          } else if (col.defaultValue === "As Defined") {
-            if (col.customDefaultValue !== undefined && col.customDefaultValue !== null) {
-              stmt += ` DEFAULT '${col.customDefaultValue}'`;
-            }
-          } else if (col.defaultValue) {
-            stmt += ` DEFAULT '${col.defaultValue}'`;
-          }
-
-          columnDefinitions.push(stmt);
-        }
-      }
-
-      if (createdOnOption) {
-        columnDefinitions.push("`createdOn` DATETIME DEFAULT CURRENT_TIMESTAMP");
-      }
-
-      if (modifiedOnOption) {
-        columnDefinitions.push("`modifiedOn` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
-      }
-
-      if (isDeletedOption) {
-        columnDefinitions.push("`isDeleted` TINYINT(1) DEFAULT 0");
-      }
-
-      if (columnDefinitions.length === 0) {
-        await connection.end();
-        return res.status(400).json({ success: false, error: "Table must have at least one column." });
-      }
-
-      const createTableQuery = `CREATE TABLE \`${tableName.trim().toLowerCase()}\` (
-        ${columnDefinitions.join(",\n      ")}
-      )`;
-
-      await connection.execute(createTableQuery);
-      await connection.end();
+    if (idOption) {
+      columnDefinitions.push("`id` INT AUTO_INCREMENT PRIMARY KEY");
     }
+
+    if (Array.isArray(columns)) {
+      for (const col of columns) {
+        if (!col.name || !col.name.trim()) continue;
+
+        let stmt = `\`${col.name.trim().toLowerCase()}\` ${col.type}`;
+        if (col.size && col.size.trim() && col.size !== "---") {
+          stmt += `(${col.size.trim()})`;
+        }
+
+        if (col.index === "UNIQUE") {
+          stmt += " UNIQUE";
+        }
+
+        if (col.defaultValue === "NULL") {
+          stmt += " DEFAULT NULL";
+        } else if (col.defaultValue === "CURRENT_TIMESTAMP") {
+          stmt += " DEFAULT CURRENT_TIMESTAMP";
+        } else if (col.defaultValue === "As Defined") {
+          if (col.customDefaultValue !== undefined && col.customDefaultValue !== null) {
+            stmt += ` DEFAULT '${col.customDefaultValue}'`;
+          }
+        } else if (col.defaultValue) {
+          stmt += ` DEFAULT '${col.defaultValue}'`;
+        }
+
+        columnDefinitions.push(stmt);
+      }
+    }
+
+    if (createdOnOption) {
+      columnDefinitions.push("`createdOn` DATETIME DEFAULT CURRENT_TIMESTAMP");
+    }
+
+    if (modifiedOnOption) {
+      columnDefinitions.push("`modifiedOn` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+    }
+
+    if (isDeletedOption) {
+      columnDefinitions.push("`isDeleted` TINYINT(1) DEFAULT 0");
+    }
+
+    if (columnDefinitions.length === 0) {
+      return res.status(400).json({ success: false, error: "Table must have at least one column." });
+    }
+
+    const createTableQuery = `CREATE TABLE \`${tableName.trim().toLowerCase()}\` (
+      ${columnDefinitions.join(",\n      ")}
+    )`;
+
+    await connection.execute(createTableQuery);
 
     return res.json({ success: true });
   } catch (err) {
+    console.error("Create Table Error:", err);
+    return res.status(500).json({ success: false, error: "Failed to create table/collection: " + err.message });
+  } finally {
     if (connection) {
       try { await connection.end(); } catch (e) {}
     }
-    console.error("Create Table Error:", err);
-    return res.status(500).json({ success: false, error: "Failed to create table/collection: " + err.message });
   }
 };
 
 export const deleteTable = async (req, res) => {
-  let connection;
+  let connection, metaConn;
   try {
     const { dbName, tableName, username } = req.body;
 
@@ -271,35 +194,27 @@ export const deleteTable = async (req, res) => {
       return res.status(400).json({ success: false, error: "Database name and table name are required." });
     }
 
-    const isMongo = dbName.startsWith("mongodb:");
-    const mongoDbRealName = isMongo ? dbName.replace("mongodb:", "") : dbName;
+    if (dbName.startsWith("mongodb:")) {
+      return res.status(400).json({ success: false, error: "MongoDB is not supported." });
+    }
+
     const cleanTableName = tableName.trim().toLowerCase();
 
-    if (!validateName(mongoDbRealName) || !validateName(cleanTableName)) {
+    if (!validateName(dbName) || !validateName(cleanTableName)) {
       return res.status(400).json({ success: false, error: "Invalid database or table name." });
     }
 
     const recycledPhysName = `_recycled_${cleanTableName}_${Date.now()}`;
 
-    if (isMongo) {
-      const client = new MongoClient(getMongoUri());
-      await client.connect();
-      const db = client.db(mongoDbRealName);
-      await db.collection(cleanTableName).rename(recycledPhysName);
-      await client.close();
-    } else {
-      connection = await mysql.createConnection({
-        ...getDbConfig(),
-        database: dbName,
-      });
+    connection = await mysql.createConnection({
+      ...getDbConfig(),
+      database: dbName,
+    });
 
-      await connection.execute(`RENAME TABLE \`${cleanTableName}\` TO \`${recycledPhysName}\``);
-      await connection.end();
-      connection = null;
-    }
+    await connection.execute(`RENAME TABLE \`${cleanTableName}\` TO \`${recycledPhysName}\``);
 
     // Insert record into recycled_items meta database
-    const metaConn = await mysql.createConnection({
+    metaConn = await mysql.createConnection({
       ...getDbConfig(),
       database: process.env.DB_NAME || "admin",
     });
@@ -317,17 +232,20 @@ export const deleteTable = async (req, res) => {
     `);
     await metaConn.execute(
       "INSERT INTO recycled_items (item_type, item_name, original_owner, parent_context, metadata) VALUES (?, ?, ?, ?, ?)",
-      ["table", tableName, username || "unknown", dbName, JSON.stringify({ isMongo, physicalName: recycledPhysName })]
+      ["table", tableName, username || "unknown", dbName, JSON.stringify({ isMongo: false, physicalName: recycledPhysName })]
     );
-    await metaConn.end();
 
     return res.json({ success: true });
   } catch (err) {
+    console.error("Delete Table Error:", err);
+    return res.status(500).json({ success: false, error: "Failed to soft-delete table/collection: " + err.message });
+  } finally {
     if (connection) {
       try { await connection.end(); } catch (e) {}
     }
-    console.error("Delete Table Error:", err);
-    return res.status(500).json({ success: false, error: "Failed to soft-delete table/collection: " + err.message });
+    if (metaConn) {
+      try { await metaConn.end(); } catch (e) {}
+    }
   }
 };
 
@@ -341,48 +259,30 @@ export const createTableRaw = async (req, res) => {
       return res.status(400).json({ success: false, error: "Database name and query string are required." });
     }
 
-    const isMongo = dbName.startsWith("mongodb:");
-    const mongoDbRealName = isMongo ? dbName.replace("mongodb:", "") : dbName;
+    if (dbName.startsWith("mongodb:")) {
+      return res.status(400).json({ success: false, error: "MongoDB is not supported." });
+    }
 
-    if (!validateName(mongoDbRealName)) {
+    if (!validateName(dbName)) {
       return res.status(400).json({ success: false, error: "Invalid database name." });
     }
 
-    if (isMongo) {
-      const client = new MongoClient(getMongoUri());
-      await client.connect();
-      const db = client.db(mongoDbRealName);
+    connection = await mysql.createConnection({
+      ...getDbConfig(),
+      database: dbName,
+      multipleStatements: true,
+    });
 
-      let parsed;
-      try {
-        parsed = JSON.parse(sql);
-      } catch (e) {
-        throw new Error("AI output was not valid JSON: " + sql);
-      }
-
-      const collectionName = parsed.collectionName || "generated_collection";
-      const document = parsed.document || parsed;
-
-      await db.collection(collectionName.trim().toLowerCase()).insertOne(document);
-      await client.close();
-    } else {
-      connection = await mysql.createConnection({
-        ...getDbConfig(),
-        database: dbName,
-        multipleStatements: true,
-      });
-
-      await connection.query(sql);
-      await connection.end();
-    }
+    await connection.query(sql);
 
     return res.json({ success: true });
   } catch (err) {
+    console.error("Create Table Raw Error:", err);
+    return res.status(500).json({ success: false, error: "Failed to execute table builder: " + err.message });
+  } finally {
     if (connection) {
       try { await connection.end(); } catch (e) {}
     }
-    console.error("Create Table Raw Error:", err);
-    return res.status(500).json({ success: false, error: "Failed to execute table builder: " + err.message });
   }
 };
 
@@ -397,54 +297,51 @@ export const getTableRows = async (req, res) => {
       return res.status(400).json({ success: false, error: "dbName and tableName parameters are required." });
     }
 
-    const isMongo = dbName.startsWith("mongodb:");
-    const mongoDbRealName = isMongo ? dbName.replace("mongodb:", "") : dbName;
+    if (dbName.startsWith("mongodb:")) {
+      return res.json({ success: true, rows: [], fields: [] });
+    }
 
-    if (!validateName(mongoDbRealName)) {
+    if (!validateName(dbName)) {
       return res.status(400).json({ success: false, error: "Invalid database name." });
     }
 
-    let rows = [];
-    let fields = [];
+    connection = await mysql.createConnection({
+      ...getDbConfig(),
+      database: dbName,
+    });
 
-    if (isMongo) {
-      const client = new MongoClient(getMongoUri());
-      await client.connect();
-      const db = client.db(mongoDbRealName);
-      const col = db.collection(tableName);
-
-      rows = await col.find({}).limit(limitVal).toArray();
-
-      if (rows.length > 0) {
-        const keySet = new Set();
-        for (const row of rows) {
-          for (const key of Object.keys(row)) {
-            keySet.add(key);
-          }
-        }
-        fields = Array.from(keySet);
-      }
-      await client.close();
-    } else {
-      connection = await mysql.createConnection({
-        ...getDbConfig(),
-        database: dbName,
-      });
-
-      const [queryRows, queryFields] = await connection.query(`SELECT * FROM \`${tableName}\` LIMIT ${limitVal}`);
-      rows = queryRows;
-      fields = queryFields ? queryFields.map(f => f.name) : [];
-
-      await connection.end();
-    }
+    const [queryRows, queryFields] = await connection.query(`SELECT * FROM \`${tableName}\` LIMIT ${limitVal}`);
+    const rows = queryRows;
+    const fields = queryFields ? queryFields.map(f => f.name) : [];
 
     return res.json({ success: true, rows, fields });
   } catch (err) {
+    console.error("Get Rows Error:", err);
+    return res.status(500).json({ success: false, error: "Failed to fetch rows: " + err.message });
+  } finally {
     if (connection) {
       try { await connection.end(); } catch (e) {}
     }
-    console.error("Get Rows Error:", err);
-    return res.status(500).json({ success: false, error: "Failed to fetch rows: " + err.message });
+  }
+};
+
+// Helper to write executing queries to query_logger table if it exists
+const logQueryToLogger = async (connection, sqlQuery, values = [], endpoint = "Admin Portal", username = "admin") => {
+  try {
+    const [tables] = await connection.query("SHOW TABLES LIKE 'query_logger'");
+    if (tables.length > 0) {
+      let formattedSql = sqlQuery;
+      values.forEach(val => {
+        const replacement = typeof val === "string" ? `'${val.replace(/'/g, "''")}'` : typeof val === "object" && val !== null ? `'${JSON.stringify(val)}'` : val;
+        formattedSql = formattedSql.replace("?", replacement);
+      });
+      await connection.query(
+        "INSERT INTO `query_logger` (`query`, `link`, `accountID`) VALUES (?, ?, ?)",
+        [formattedSql, endpoint, username || "admin"]
+      );
+    }
+  } catch (err) {
+    console.warn("Failed to write to query_logger:", err.message);
   }
 };
 
@@ -452,94 +349,105 @@ export const getTableRows = async (req, res) => {
 export const insertTableRow = async (req, res) => {
   let connection;
   try {
-    const { dbName, tableName, record } = req.body;
+    const { dbName, tableName, record, username } = req.body;
 
     if (!dbName || !tableName || !record) {
       return res.status(400).json({ success: false, error: "dbName, tableName and record are required." });
     }
 
-    const isMongo = dbName.startsWith("mongodb:");
-    const mongoDbRealName = isMongo ? dbName.replace("mongodb:", "") : dbName;
-
-    if (isMongo) {
-      const client = new MongoClient(getMongoUri());
-      await client.connect();
-      const db = client.db(mongoDbRealName);
-      const col = db.collection(tableName);
-
-      const result = await col.insertOne(record);
-      await client.close();
-      return res.json({ success: true, insertedId: result.insertedId });
-    } else {
-      connection = await mysql.createConnection({
-        ...getDbConfig(),
-        database: dbName,
-      });
-
-      const keys = Object.keys(record);
-      const values = Object.values(record);
-      const placeholders = keys.map(() => "?").join(", ");
-      const sql = `INSERT INTO \`${tableName}\` (${keys.map(k => `\`${k}\``).join(", ")}) VALUES (${placeholders})`;
-
-      const [result] = await connection.execute(sql, values);
-      await connection.end();
-      return res.json({ success: true, insertId: result.insertId });
+    if (dbName.startsWith("mongodb:")) {
+      return res.status(400).json({ success: false, error: "MongoDB is not supported." });
     }
+
+    connection = await mysql.createConnection({
+      ...getDbConfig(),
+      database: dbName,
+    });
+
+    const keys = Object.keys(record);
+    const values = Object.values(record);
+    const placeholders = keys.map(() => "?").join(", ");
+    const sql = `INSERT INTO \`${tableName}\` (${keys.map(k => `\`${k}\``).join(", ")}) VALUES (${placeholders})`;
+
+    const [result] = await connection.execute(sql, values);
+
+    // Log to query_logger
+    await logQueryToLogger(connection, sql, values, "Admin Portal - Insert Row", username);
+
+    return res.json({ success: true, insertId: result.insertId });
   } catch (err) {
+    console.error("Insert Row Error:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  } finally {
     if (connection) {
       try { await connection.end(); } catch (e) {}
     }
-    console.error("Insert Row Error:", err);
-    return res.status(500).json({ success: false, error: err.message });
   }
+};
+
+// Helper to dynamically get the primary key column name of a MySQL table
+const getPrimaryKeyColumn = async (connection, tableName) => {
+  try {
+    const [columnsDesc] = await connection.query(`DESCRIBE \`${tableName}\``);
+    // 1. Look for Key === "PRI"
+    let priCol = columnsDesc.find(col => col.Key === "PRI");
+    if (priCol) return priCol.Field;
+    // 2. Look for any column named "id" (case-insensitive)
+    let idCol = columnsDesc.find(col => col.Field.toLowerCase() === "id");
+    if (idCol) return idCol.Field;
+    // 3. Look for any column ending in "id"
+    let endsWithId = columnsDesc.find(col => col.Field.toLowerCase().endsWith("id"));
+    if (endsWithId) return endsWithId.Field;
+    // 4. Fallback to the first column in the table
+    if (columnsDesc.length > 0) return columnsDesc[0].Field;
+  } catch (e) {
+    console.error("Failed to describe table for primary key:", e);
+  }
+  return "id"; // absolute fallback
 };
 
 // ==================== 7. ROWS UPDATE ====================
 export const updateTableRow = async (req, res) => {
   let connection;
   try {
-    const { dbName, tableName, id, record } = req.body;
+    const { dbName, tableName, id, record, username } = req.body;
 
     if (!dbName || !tableName || !id || !record) {
       return res.status(400).json({ success: false, error: "dbName, tableName, id and record are required." });
     }
 
-    const isMongo = dbName.startsWith("mongodb:");
-    const mongoDbRealName = isMongo ? dbName.replace("mongodb:", "") : dbName;
-
-    if (isMongo) {
-      const client = new MongoClient(getMongoUri());
-      await client.connect();
-      const db = client.db(mongoDbRealName);
-      const col = db.collection(tableName);
-
-      const { _id, ...updateData } = record;
-      const result = await col.updateOne({ _id: new ObjectId(id) }, { $set: updateData });
-      await client.close();
-      return res.json({ success: true, modifiedCount: result.modifiedCount });
-    } else {
-      connection = await mysql.createConnection({
-        ...getDbConfig(),
-        database: dbName,
-      });
-
-      const { id: _, ...updateData } = record;
-      const keys = Object.keys(updateData);
-      const values = Object.values(updateData);
-
-      const setClause = keys.map(k => `\`${k}\` = ?`).join(", ");
-      const sql = `UPDATE \`${tableName}\` SET ${setClause} WHERE \`id\` = ?`;
-
-      const [result] = await connection.execute(sql, [...values, id]);
-      await connection.end();
-      return res.json({ success: true, affectedRows: result.affectedRows });
+    if (dbName.startsWith("mongodb:")) {
+      return res.status(400).json({ success: false, error: "MongoDB is not supported." });
     }
+
+    connection = await mysql.createConnection({
+      ...getDbConfig(),
+      database: dbName,
+    });
+
+    const pkColumn = await getPrimaryKeyColumn(connection, tableName);
+    
+    // Filter out the primary key from record to avoid trying to update it
+    const { [pkColumn]: _, id: __, ...updateData } = record;
+    const keys = Object.keys(updateData);
+    const values = Object.values(updateData);
+
+    const setClause = keys.map(k => `\`${k}\` = ?`).join(", ");
+    const sql = `UPDATE \`${tableName}\` SET ${setClause} WHERE \`${pkColumn}\` = ?`;
+
+    const [result] = await connection.execute(sql, [...values, id]);
+
+    // Log to query_logger
+    await logQueryToLogger(connection, sql, [...values, id], "Admin Portal - Update Row", username);
+
+    return res.json({ success: true, affectedRows: result.affectedRows });
   } catch (err) {
+    console.error("Update Row Error:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  } finally {
     if (connection) {
       try { await connection.end(); } catch (e) {}
     }
-    console.error("Update Row Error:", err);
-    return res.status(500).json({ success: false, error: err.message });
   }
 };
 
@@ -547,41 +455,36 @@ export const updateTableRow = async (req, res) => {
 export const deleteTableRow = async (req, res) => {
   let connection;
   try {
-    const { dbName, tableName, id } = req.query;
+    const { dbName, tableName, id, username } = req.query;
 
     if (!dbName || !tableName || !id) {
       return res.status(400).json({ success: false, error: "dbName, tableName and id query parameters are required." });
     }
 
-    const isMongo = dbName.startsWith("mongodb:");
-    const mongoDbRealName = isMongo ? dbName.replace("mongodb:", "") : dbName;
-
-    if (isMongo) {
-      const client = new MongoClient(getMongoUri());
-      await client.connect();
-      const db = client.db(mongoDbRealName);
-      const col = db.collection(tableName);
-
-      const result = await col.deleteOne({ _id: new ObjectId(id) });
-      await client.close();
-      return res.json({ success: true, deletedCount: result.deletedCount });
-    } else {
-      connection = await mysql.createConnection({
-        ...getDbConfig(),
-        database: dbName,
-      });
-
-      const sql = `DELETE FROM \`${tableName}\` WHERE \`id\` = ?`;
-      const [result] = await connection.execute(sql, [id]);
-      await connection.end();
-      return res.json({ success: true, affectedRows: result.affectedRows });
+    if (dbName.startsWith("mongodb:")) {
+      return res.status(400).json({ success: false, error: "MongoDB is not supported." });
     }
+
+    connection = await mysql.createConnection({
+      ...getDbConfig(),
+      database: dbName,
+    });
+
+    const pkColumn = await getPrimaryKeyColumn(connection, tableName);
+    const sql = `DELETE FROM \`${tableName}\` WHERE \`${pkColumn}\` = ?`;
+    const [result] = await connection.execute(sql, [id]);
+
+    // Log to query_logger
+    await logQueryToLogger(connection, sql, [id], "Admin Portal - Delete Row", username);
+
+    return res.json({ success: true, affectedRows: result.affectedRows });
   } catch (err) {
+    console.error("Delete Row Error:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  } finally {
     if (connection) {
       try { await connection.end(); } catch (e) {}
     }
-    console.error("Delete Row Error:", err);
-    return res.status(500).json({ success: false, error: err.message });
   }
 };
 
@@ -599,9 +502,44 @@ const getMockVal = (category, fieldName = "", fieldType = "", customVal) => {
 
   const fieldLower = fieldName.toLowerCase();
   const typeLower = fieldType.toLowerCase();
+
+  // Handle bit/boolean columns — only 0 or 1 allowed
+  if (typeLower.includes("bit") || (typeLower === "tinyint(1)")) {
+    if (category === "As Defined" && customVal !== undefined && customVal !== null && customVal.trim() !== "") {
+      return parseInt(customVal) ? 1 : 0;
+    }
+    return Math.random() > 0.5 ? 1 : 0;
+  }
+
+  // Handle decimal/numeric columns — respect precision limits
+  const decimalMatch = typeLower.match(/decimal\((\d+),(\d+)\)/);
+  if (decimalMatch) {
+    const totalDigits = parseInt(decimalMatch[1]);
+    const decimalPlaces = parseInt(decimalMatch[2]);
+    const integerDigits = totalDigits - decimalPlaces;
+    const maxVal = Math.pow(10, integerDigits) - 1; // e.g. decimal(4,2) → max 99.99
+
+    // Percent fields → realistic tax/percentage values
+    if (fieldLower.includes("percent") || fieldLower.includes("pct") || fieldLower.includes("rate") || fieldLower.includes("gst") || fieldLower.includes("tax")) {
+      const commonPercents = [5.00, 9.00, 12.00, 18.00, 28.00, 2.50, 6.00, 14.00];
+      const val = commonPercents[Math.floor(Math.random() * commonPercents.length)];
+      return Math.min(val, maxVal);
+    }
+
+    // Generic decimal — stay within column's max
+    if (category === "As Defined" && customVal !== undefined && customVal !== null && customVal.trim() !== "") {
+      const parsed = parseFloat(customVal);
+      return isNaN(parsed) ? 0 : Math.min(parsed, maxVal);
+    }
+    const rawVal = parseFloat((Math.random() * Math.min(maxVal, 999)).toFixed(decimalPlaces));
+    return Math.min(rawVal, maxVal);
+  }
   
   const isNumeric = typeLower.includes("int") || typeLower.includes("decimal") || typeLower.includes("float") || typeLower.includes("double") || typeLower.includes("numeric");
   const isDateType = typeLower.includes("date") || typeLower.includes("time") || typeLower.includes("timestamp");
+
+  const lengthMatch = fieldType.match(/\((\d+)\)/);
+  const maxLength = lengthMatch ? parseInt(lengthMatch[1]) : 255;
 
   let targetCategory = category;
   if (category === "As Defined" || !category) {
@@ -615,7 +553,7 @@ const getMockVal = (category, fieldName = "", fieldType = "", customVal) => {
       targetCategory = "Date";
     } else {
       if (fieldLower.includes("email")) targetCategory = "Email";
-      else if (fieldLower.includes("phone") || fieldLower.includes("mobile") || fieldLower.includes("tel")) targetCategory = "Indian Mobile";
+      else if (fieldLower.includes("phone") || fieldLower.includes("mobile") || fieldLower.includes("tel") || fieldLower.includes("contact")) targetCategory = "Indian Mobile";
       else if (fieldLower.includes("dob") || fieldLower.includes("birth") || fieldLower.includes("date_of_birth")) targetCategory = "Date of Birth";
       else if (fieldLower.includes("image") || fieldLower.includes("avatar") || fieldLower.includes("photo") || fieldLower.includes("pic")) targetCategory = "Image URL";
       else if (fieldLower.includes("name")) targetCategory = "Full Name";
@@ -661,77 +599,93 @@ const getMockVal = (category, fieldName = "", fieldType = "", customVal) => {
   const categoriesPool = ["Electronics", "Clothing", "Home & Kitchen", "Books", "Beauty & Health", "Sports"];
   
   const titles = [
-    "Summer Cotton T-Shirt", "Wireless Noise Cancelling Headphones", "Stainless Steel Water Bottle",
-    "Introduction to Web Development", "Organic Green Tea Leaves", "Ergonomic Office Chair",
-    "Matte Liquid Lipstick", "Smartphone With 108MP Camera", "Bluetooth Fitness Tracker Smartwatch"
+    "Summer T-Shirt", "Wireless Headphones", "Water Bottle",
+    "Web Development", "Green Tea", "Office Chair",
+    "Liquid Lipstick", "Smartphone", "Smartwatch"
   ];
 
   const addresses = [
-    "102, Shanti Nagar, Andheri East, Mumbai, MH", "45, Jubilee Hills, Road No 3, Hyderabad, TS",
-    "7B, Elgin Road, Near Forum Mall, Kolkata, WB", "321, Connaught Place, Block C, New Delhi, DL",
-    "504, 100 Feet Road, Indiranagar, Bengaluru, KA", "12, Anna Salai, Teynampet, Chennai, TN"
+    "Andheri East, Mumbai, MH", "Jubilee Hills, Hyderabad, TS",
+    "Elgin Road, Kolkata, WB", "Connaught Place, New Delhi, DL",
+    "Indiranagar, Bengaluru, KA", "Anna Salai, Chennai, TN"
   ];
 
   const descriptions = [
-    "A premium quality product designed for long-lasting usage and comfort.",
-    "Highly recommended by experts in the industry. Easy to use and low maintenance.",
-    "Features state-of-the-art technology with a sleek, modern, and compact design.",
-    "Perfect choice for daily usage or as a premium gift for your friends and family.",
-    "Eco-friendly materials used. Cruelty-free and certified by standard safety authorities."
+    "Premium quality product.",
+    "Highly recommended.",
+    "State-of-the-art tech.",
+    "Perfect for daily usage.",
+    "Eco-friendly materials."
   ];
 
-  const companies = ["HertzSoft Technologies", "Tata Consultancy Services", "Infosys", "Reliance Industries", "Wipro", "HDFC Bank", "Mahindra Group"];
+  const companies = ["HertzSoft", "TCS", "Infosys", "Reliance", "Wipro", "HDFC", "Mahindra"];
   const genders = ["Male", "Female", "Other"];
   const websites = ["https://hertzsoft.com", "https://google.com", "https://github.com", "https://wikipedia.org", "https://medium.com"];
   const ips = ["192.168.1.1", "10.0.0.12", "172.16.254.1", "8.8.8.8", "127.0.0.1"];
 
   switch (targetCategory) {
     case "Full Name":
-      return names[Math.floor(Math.random() * names.length)];
+      return names[Math.floor(Math.random() * names.length)].slice(0, maxLength);
     case "Date of Birth":
-      return `199${Math.floor(Math.random() * 10)}-0${Math.floor(Math.random() * 9) + 1}-1${Math.floor(Math.random() * 9)}`;
-    case "Indian Mobile":
-      return `+91 9${Math.floor(Math.random() * 10)}${Math.floor(Math.random() * 8000000) + 1000000}`;
-    case "Image URL":
-      return `https://picsum.photos/200/300?random=${Math.floor(Math.random() * 1000)}`;
-    case "Email":
-      if (Math.random() > 0.4) {
-        return emails[Math.floor(Math.random() * emails.length)];
+      return `199${Math.floor(Math.random() * 10)}-0${Math.floor(Math.random() * 9) + 1}-1${Math.floor(Math.random() * 9)}`.slice(0, maxLength);
+    case "Indian Mobile": {
+      const numPart = `9${Math.floor(Math.random() * 10)}${Math.floor(Math.random() * 8000000) + 1000000}`; // 9 digits
+      if (maxLength < 15) {
+        return numPart.slice(0, maxLength);
       }
-      return `${names[Math.floor(Math.random() * names.length)].toLowerCase().replace(/\s+/g, ".")}@example.com`;
+      return `+91 ${numPart}`.slice(0, maxLength);
+    }
+    case "Image URL":
+      return `https://picsum.photos/200?r=${Math.floor(Math.random() * 1000)}`.slice(0, maxLength);
+    case "Email": {
+      const suffix = String(Math.floor(Math.random() * 90000) + 10000);
+      const domain = "@example.com";
+      const neededLength = suffix.length + domain.length + 2;
+      if (maxLength < neededLength) {
+        return (names[Math.floor(Math.random() * names.length)].toLowerCase().replace(/\s+/g, "") + suffix).slice(0, maxLength);
+      }
+      const namePart = names[Math.floor(Math.random() * names.length)].toLowerCase().replace(/\s+/g, ".").slice(0, maxLength - neededLength);
+      return `${namePart}${suffix}${domain}`;
+    }
     case "Price":
       return parseFloat((Math.random() * 999 + 9.99).toFixed(2));
     case "Number":
       return Math.floor(Math.random() * 150) + 1;
     case "Status":
-      return statuses[Math.floor(Math.random() * statuses.length)];
+      return statuses[Math.floor(Math.random() * statuses.length)].slice(0, maxLength);
     case "Role/Type":
-      if (fieldLower.includes("role")) return roles[Math.floor(Math.random() * roles.length)];
-      return categoriesPool[Math.floor(Math.random() * categoriesPool.length)];
+      if (fieldLower.includes("role")) return roles[Math.floor(Math.random() * roles.length)].slice(0, maxLength);
+      return categoriesPool[Math.floor(Math.random() * categoriesPool.length)].slice(0, maxLength);
     case "Description":
-      return descriptions[Math.floor(Math.random() * descriptions.length)];
+      return descriptions[Math.floor(Math.random() * descriptions.length)].slice(0, maxLength);
     case "Address":
-      return addresses[Math.floor(Math.random() * addresses.length)];
+      return addresses[Math.floor(Math.random() * addresses.length)].slice(0, maxLength);
     case "Title":
-      return titles[Math.floor(Math.random() * titles.length)];
+      return titles[Math.floor(Math.random() * titles.length)].slice(0, maxLength);
     case "Date":
       const d = new Date();
       d.setDate(d.getDate() - Math.floor(Math.random() * 30));
-      return d.toISOString().split("T")[0];
+      return d.toISOString().split("T")[0].slice(0, maxLength);
     case "Password":
-      return "$2b$10$MOCKhashedPasswordSecretStringHere123456789";
+      return "$2b$10$MOCKhashedPasswordSecretStringHere123456789".slice(0, maxLength);
     case "Website URL":
-      return websites[Math.floor(Math.random() * websites.length)];
+      return websites[Math.floor(Math.random() * websites.length)].slice(0, maxLength);
     case "Zip Code":
-      return String(Math.floor(Math.random() * 800000) + 110000);
+      return String(Math.floor(Math.random() * 800000) + 110000).slice(0, maxLength);
     case "Company Name":
-      return companies[Math.floor(Math.random() * companies.length)];
+      return companies[Math.floor(Math.random() * companies.length)].slice(0, maxLength);
     case "Gender":
-      return genders[Math.floor(Math.random() * genders.length)];
+      return genders[Math.floor(Math.random() * genders.length)].slice(0, maxLength);
     case "IP Address":
-      return ips[Math.floor(Math.random() * ips.length)];
-    default:
-      return "Mock Text";
+      return ips[Math.floor(Math.random() * ips.length)].slice(0, maxLength);
+    default: {
+      const suffix = String(Math.floor(Math.random() * 90000) + 10000);
+      if (maxLength <= suffix.length) {
+        return suffix.slice(0, maxLength);
+      }
+      const prefix = `Mock_${fieldName}`.slice(0, maxLength - suffix.length - 1);
+      return `${prefix}_${suffix}`;
+    }
   }
 };
 
@@ -744,70 +698,45 @@ export const seedTable = async (req, res) => {
       return res.status(400).json({ success: false, error: "Database name and table name are required." });
     }
 
-    const isMongo = dbName.startsWith("mongodb:");
-    const mongoDbRealName = isMongo ? dbName.replace("mongodb:", "") : dbName;
+    if (dbName.startsWith("mongodb:")) {
+      return res.status(400).json({ success: false, error: "MongoDB is not supported." });
+    }
+
     const rowsCount = Math.min(Math.max(parseInt(count) || 5, 1), 100);
 
-    if (isMongo) {
-      const client = new MongoClient(getMongoUri());
-      await client.connect();
-      const db = client.db(mongoDbRealName);
-      const col = db.collection(tableName);
+    connection = await mysql.createConnection({
+      ...getDbConfig(),
+      database: dbName,
+    });
 
-      const sample = await col.findOne();
-      const fields = sample ? Object.keys(sample).filter(k => k !== "_id") : (mappings ? Object.keys(mappings) : ["name", "email"]);
+    const [cols] = await connection.query(`DESCRIBE \`${tableName}\``);
+    const validCols = cols.filter(c => !["id", "created_at", "createdOn", "updated_at", "modifiedOn", "is_deleted", "isDeleted"].includes(c.Field));
 
-      const documents = [];
-      for (let r = 0; r < rowsCount; r++) {
-        const doc = {};
-        for (const field of fields) {
-          const category = mappings?.[field] || "As Defined";
-          const customVal = customValues?.[field];
-          doc[field] = getMockVal(category, field, "VARCHAR", customVal);
-        }
-        documents.push(doc);
+    for (let r = 0; r < rowsCount; r++) {
+      const colNames = [];
+      const colValues = [];
+
+      for (const col of validCols) {
+        const category = mappings?.[col.Field] || "As Defined";
+        const customVal = customValues?.[col.Field];
+        colNames.push(col.Field);
+        colValues.push(getMockVal(category, col.Field, col.Type, customVal));
       }
 
-      if (documents.length > 0) {
-        await col.insertMany(documents);
+      if (colNames.length > 0) {
+        const placeholders = colNames.map(() => "?").join(", ");
+        const insertQuery = `INSERT INTO \`${tableName}\` (${colNames.map(n => `\`${n}\``).join(", ")}) VALUES (${placeholders})`;
+        await connection.execute(insertQuery, colValues);
       }
-      await client.close();
-    } else {
-      connection = await mysql.createConnection({
-        ...getDbConfig(),
-        database: dbName,
-      });
-
-      const [cols] = await connection.query(`DESCRIBE \`${tableName}\``);
-      const validCols = cols.filter(c => !["id", "created_at", "createdOn", "updated_at", "modifiedOn", "is_deleted", "isDeleted"].includes(c.Field));
-
-      for (let r = 0; r < rowsCount; r++) {
-        const colNames = [];
-        const colValues = [];
-
-        for (const col of validCols) {
-          const category = mappings?.[col.Field] || "As Defined";
-          const customVal = customValues?.[col.Field];
-          colNames.push(col.Field);
-          colValues.push(getMockVal(category, col.Field, col.Type, customVal));
-        }
-
-        if (colNames.length > 0) {
-          const placeholders = colNames.map(() => "?").join(", ");
-          const insertQuery = `INSERT INTO \`${tableName}\` (${colNames.map(n => `\`${n}\``).join(", ")}) VALUES (${placeholders})`;
-          await connection.execute(insertQuery, colValues);
-        }
-      }
-
-      await connection.end();
     }
 
     return res.json({ success: true });
   } catch (err) {
+    console.error("Seeding Error:", err);
+    return res.status(500).json({ success: false, error: "Failed to insert mock data: " + err.message });
+  } finally {
     if (connection) {
       try { await connection.end(); } catch (e) {}
     }
-    console.error("Seeding Error:", err);
-    return res.status(500).json({ success: false, error: "Failed to insert mock data: " + err.message });
   }
 };

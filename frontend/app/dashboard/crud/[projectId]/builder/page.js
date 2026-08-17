@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useToast } from "../../../../context/ToastContext";
 import { getProjectsForUser } from "../../../../utils/projectStorage";
+import { databaseService } from "../../../../../services/databaseService";
 export default function AdvancedCrudBuilder() {
   const { showToast } = useToast();
   const router = useRouter();
@@ -28,11 +29,9 @@ export default function AdvancedCrudBuilder() {
   }, [projectId]);
   const fetchDatabaseTables = async (dbName) => {
     try {
-      const res = await fetch(`/api/database/tables?dbName=${encodeURIComponent(dbName)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.tables) {
-          const tableNames = data.tables.map((t) => t.name);
+      const data = await databaseService.getTables(dbName);
+      if (data.success && data.tables) {
+        const tableNames = data.tables.map((t) => t.name);
           setTables(tableNames);
           const initialConfigs = {};
           const map = {};
@@ -49,12 +48,11 @@ export default function AdvancedCrudBuilder() {
           }
           setColumnsMap(map);
           setProjectConfig(initialConfigs);
-          if (tableNames.length > 0) {
-            setSelectedTable(tableNames[0]);
+            if (tableNames.length > 0) {
+              setSelectedTable(tableNames[0]);
+            }
           }
-        }
-      }
-    } catch (err) {
+      } catch (err) {
       console.error("Failed to fetch tables/columns for builder:", err);
     }
   };
@@ -103,7 +101,12 @@ export default function AdvancedCrudBuilder() {
         readOnly: false,
         order: idx + 1,
         section: "General Info",
-        conditionalVisibility: []
+        conditionalVisibility: [],
+        selectType: "static",
+        selectOptions: ["Option A", "Option B"],
+        selectLookupTable: "",
+        selectLookupValue: "id",
+        selectLookupLabel: "name"
       });
       edit_form.push({
         fieldName: name,
@@ -119,7 +122,12 @@ export default function AdvancedCrudBuilder() {
         order: idx + 1,
         section: "General Info",
         conditionalVisibility: [],
-        editable: true
+        editable: true,
+        selectType: "static",
+        selectOptions: ["Option A", "Option B"],
+        selectLookupTable: "",
+        selectLookupValue: "id",
+        selectLookupLabel: "name"
       });
       let detailFormat = "raw";
       if (name.includes("image") || name.includes("avatar") || name.includes("pic")) detailFormat = "full image";
@@ -557,7 +565,7 @@ export default function AdvancedCrudBuilder() {
                   <div style={{ display: "flex", gap: "8px" }}>
                     {activeTab === "Edit" && <button
     onClick={handleCopyCreateToEdit}
-    style={{ border: "1px solid #cbd5e1", backgroundColor: "white", color: "#475569", fontSize: "11px", padding: "3px 8px", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}
+    style={{ border: "1px solid var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-muted)", fontSize: "11px", padding: "3px 8px", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}
     title="Copy all Create settings to Edit"
   >
                         Copy Create Settings
@@ -669,8 +677,7 @@ export default function AdvancedCrudBuilder() {
                                 Editable (Unlock field)
                               </label>}
                           </div>
-
-                          <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                           <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
                             <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-muted)" }}>Form Widget Type:</label>
                             <select value={cfg.widgetType} onChange={(e) => updateFieldSetting(activeTab, "widgetType", e.target.value)} style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13.5px", outline: "none" }}>
                               <option value="text">Single Line Text input</option>
@@ -692,6 +699,76 @@ export default function AdvancedCrudBuilder() {
                               <option value="hidden">Hidden Input element</option>
                             </select>
                           </div>
+
+                          {["select", "multi-select", "searchable select"].includes(cfg.widgetType) && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-tertiary)", marginTop: "4px" }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                                <label style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-muted)" }}>Datasource Type:</label>
+                                <select 
+                                  value={cfg.selectType || "static"} 
+                                  onChange={(e) => updateFieldSetting(activeTab, "selectType", e.target.value)}
+                                  style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}
+                                >
+                                  <option value="static">Static List (Custom values)</option>
+                                  <option value="table">Database Table Lookup (Dynamic)</option>
+                                </select>
+                              </div>
+
+                              {(cfg.selectType === "static" || !cfg.selectType) && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                                  <label style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-muted)" }}>Static Options (comma separated):</label>
+                                  <input 
+                                    type="text" 
+                                    placeholder="Option A, Option B, Option C"
+                                    value={Array.isArray(cfg.selectOptions) ? cfg.selectOptions.join(", ") : ""} 
+                                    onChange={(e) => {
+                                      const arr = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
+                                      updateFieldSetting(activeTab, "selectOptions", arr);
+                                    }} 
+                                    style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }} 
+                                  />
+                                </div>
+                              )}
+
+                              {cfg.selectType === "table" && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                                    <label style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-muted)" }}>Lookup Table:</label>
+                                    <select 
+                                      value={cfg.selectLookupTable || ""} 
+                                      onChange={(e) => updateFieldSetting(activeTab, "selectLookupTable", e.target.value)}
+                                      style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}
+                                    >
+                                      <option value="">-- Select Table --</option>
+                                      {tables.map(t => <option key={t} value={t}>{t}</option>)}
+                                    </select>
+                                  </div>
+                                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                                      <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-muted)" }}>Value Field:</label>
+                                      <input 
+                                        type="text" 
+                                        value={cfg.selectLookupValue || "id"} 
+                                        placeholder="e.g. id"
+                                        onChange={(e) => updateFieldSetting(activeTab, "selectLookupValue", e.target.value)} 
+                                        style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }} 
+                                      />
+                                    </div>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                                      <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-muted)" }}>Label Field:</label>
+                                      <input 
+                                        type="text" 
+                                        value={cfg.selectLookupLabel || "name"} 
+                                        placeholder="e.g. name"
+                                        onChange={(e) => updateFieldSetting(activeTab, "selectLookupLabel", e.target.value)} 
+                                        style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }} 
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
 
                           <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
                             <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-muted)" }}>Form Label Title:</label>

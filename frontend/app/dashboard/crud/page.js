@@ -1,8 +1,10 @@
-"use strict";
 "use client";
+"use strict";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getProjectsForUser, saveProjectsForUser } from "../../utils/projectStorage";
+import { databaseService } from "../../../services/databaseService";
+import { crudService } from "../../../services/crudService";
 export default function CrudProjectsListPage() {
   const [projects, setProjects] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -27,9 +29,9 @@ export default function CrudProjectsListPage() {
     setProjects(list);
 
     if (user) {
-      fetch(`/api/database/list?username=${encodeURIComponent(user)}`).then((res) => res.json()).then((data) => {
+      databaseService.getDatabases(user).then((data) => {
         if (data.success && data.databases) {
-          const dbNames = data.databases.map((db) => db.name);
+          const dbNames = data.databases.map((db) => db.name).filter((name) => !name.startsWith("mongodb:"));
           setUserDatabases(dbNames);
           if (dbNames.length > 0) {
             setDatabaseName(dbNames[0]);
@@ -37,15 +39,25 @@ export default function CrudProjectsListPage() {
         }
       }).catch((err) => console.error("Failed to load user databases for CRUD builder:", err));
     }
+
+    const handleSync = () => {
+      const refreshedList = getProjectsForUser(user, role);
+      setProjects(refreshedList);
+    };
+    window.addEventListener('projects_synced', handleSync);
+    return () => {
+      window.removeEventListener('projects_synced', handleSync);
+    };
   }, []);
+
   const saveProjects = (newProjects) => {
     setProjects(newProjects);
     saveProjectsForUser(newProjects, currentUser, userRole);
   };
-  const handleCreateProject = (e) => {
+  const handleCreateProject = async (e) => {
     e.preventDefault();
     if (!projectName.trim()) return;
-    const formattedProjName = projectName.trim().toLowerCase().replace(/\s+/g, "_");
+    const formattedProjName = projectName.trim().toLowerCase().replace(/[\s-]+/g, "_");
     const newProject = {
       id: "proj_" + Date.now(),
       name: formattedProjName,
@@ -61,6 +73,15 @@ export default function CrudProjectsListPage() {
     setDirectory("");
     setDatabaseName("");
     setConnectFolder("lib");
+    
+    // Call the backend to initialize the boilerplate immediately
+    try {
+      await crudService.initializeProject(newProject);
+      console.log("Project boilerplate initialized successfully.");
+    } catch (err) {
+      console.error("Failed to initialize project boilerplate:", err);
+      alert("Project created, but failed to initialize boilerplate. You may need to generate a CRUD file first.");
+    }
   };
   const confirmDeleteProject = (id, name) => {
     setProjectToDelete({ id, name });
@@ -130,35 +151,35 @@ export default function CrudProjectsListPage() {
               <tbody>
                 {projects.filter((p) => !p.isDeleted).length === 0 ? <tr>
                     <td colSpan={5} style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>No CRUD projects found. Click &quot;Create Project&quot; to start!</td>
-                  </tr> : projects.filter((p) => !p.isDeleted && p.name.toLowerCase().includes(searchQuery.toLowerCase())).map((p, idx) => <tr key={p.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
+                  </tr> : projects.filter((p) => !p.isDeleted && p.name.toLowerCase().includes(searchQuery.toLowerCase())).map((p, idx) => <tr key={p.id} className="db-row" style={{ borderBottom: "1px solid var(--border-color)" }}>
                         <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{idx + 1}</td>
                         <td style={{ padding: "14px 16px" }}>
                           <button
-    onClick={() => router.push(`/dashboard/crud/${p.id}`)}
-    style={{ background: "none", border: "none", color: "#0ea5e9", textDecoration: "underline", cursor: "pointer", fontSize: "14px", fontWeight: "500", padding: 0 }}
-  >
+                            onClick={() => router.push(`/dashboard/crud/${p.id}`)}
+                            className="db-btn-link"
+                          >
                             {p.name}
                           </button>
                         </td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)", fontFamily: "monospace", fontSize: "12px" }}>{p.directory}</td>
+                        <td style={{ padding: "14px 16px", color: "var(--text-primary)", fontFamily: "monospace", fontSize: "14px" }}>{p.directory}</td>
                         <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{p.databaseName || "None"}</td>
                                 <td style={{ padding: "14px 16px" }}>
                           <div style={{ display: "flex", gap: "8px" }}>
                             <button
-    onClick={() => router.push(`/dashboard/crud/${p.id}`)}
-    style={{ border: "none", background: "none", cursor: "pointer", padding: "6px", color: "#0ea5e9", display: "inline-flex", alignItems: "center" }}
-    title="View Files"
-  >
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              onClick={() => router.push(`/dashboard/crud/${p.id}`)}
+                              className="db-action-btn"
+                              title="View Files"
+                            >
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
                               </svg>
                             </button>
                             <button
-    onClick={() => confirmDeleteProject(p.id, p.name)}
-    style={{ border: "none", background: "none", cursor: "pointer", padding: "6px", color: "#ef4444", display: "inline-flex", alignItems: "center" }}
-    title="Delete Project"
-  >
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              onClick={() => confirmDeleteProject(p.id, p.name)}
+                              className="db-action-btn delete"
+                              title="Delete Project"
+                            >
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                 <polyline points="3 6 5 6 21 6" />
                                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                               </svg>
@@ -190,8 +211,8 @@ export default function CrudProjectsListPage() {
     placeholder="MyEcommerceApp"
     required
     value={projectName}
-    onChange={(e) => setProjectName(e.target.value.toLowerCase().replace(/\s+/g, "_"))}
-    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none" }}
+    onChange={(e) => setProjectName(e.target.value.toLowerCase().replace(/[\s-]+/g, "_"))}
+    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
   />
                 </div>
 
@@ -199,11 +220,12 @@ export default function CrudProjectsListPage() {
                   <label style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-muted)" }}>Local Directory Path:</label>
                   <input
     type="text"
-    placeholder="C:/projects/myecommerceapp"
+    placeholder="C:/Users/YourName/Desktop/my_project"
     value={directory}
-    onChange={(e) => setDirectory(e.target.value)}
-    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none" }}
+    onChange={(e) => setDirectory(e.target.value.replace(/\\/g, "/"))}
+    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none", boxSizing: "border-box", fontFamily: "monospace" }}
   />
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)", opacity: 0.7 }}>Use full path e.g. C:/Users/Faizan/Desktop/my_project (folder will be auto-created)</span>
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -212,12 +234,12 @@ export default function CrudProjectsListPage() {
     type="text"
     placeholder="ecommerce"
     value={databaseName}
-    onChange={(e) => setDatabaseName(e.target.value.toLowerCase().replace(/\s+/g, "_"))}
-    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none" }}
+    onChange={(e) => setDatabaseName(e.target.value.toLowerCase().replace(/[\s-]+/g, "_"))}
+    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
   /> : <select
     value={databaseName}
     onChange={(e) => setDatabaseName(e.target.value)}
-    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none" }}
+    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
   >
                       {userDatabases.map((db) => <option key={db} value={db}>
                           {db.startsWith("mongodb:") ? `${db.replace("mongodb:", "")} (MongoDB)` : `${db} (MySQL)`}
@@ -226,14 +248,14 @@ export default function CrudProjectsListPage() {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <label style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-muted)" }}>DB Connection Folder:</label>
-                  <input
+                  {/* <label style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-muted)" }}>DB Connection Folder:</label> */}
+                  {/* <input
     type="text"
     placeholder="lib"
     value={connectFolder}
     onChange={(e) => setConnectFolder(e.target.value)}
-    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none" }}
-  />
+    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
+  /> */}
                 </div>
               </div>
               

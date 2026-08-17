@@ -65,19 +65,13 @@ export const checkDatabaseAccess = async (req, res, next) => {
       .map((name) => name.trim())
       .filter(Boolean);
 
-    const cleanDbName = dbName.startsWith("mongodb:")
-      ? dbName.replace("mongodb:", "")
-      : dbName;
-
-    const hasAccess = dbNames.some((d) => {
-      const cleanD = d.startsWith("mongodb:") ? d.replace("mongodb:", "") : d;
-      return cleanD === cleanDbName;
-    });
+    // Compare database names
+    const hasAccess = dbNames.some((d) => d.trim() === dbName.trim());
 
     if (!hasAccess) {
       return res.status(403).json({
         success: false,
-        error: `Access denied. You do not own the database '${cleanDbName}'.`,
+        error: `Access denied. You do not own the database '${dbName}'.`,
       });
     }
 

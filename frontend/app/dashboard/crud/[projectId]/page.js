@@ -1,8 +1,9 @@
-"use strict";
 "use client";
+"use strict";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { getProjectsForUser, saveProjectsForUser } from "../../utils/projectStorage";
+import { getProjectsForUser, saveProjectsForUser } from "../../../utils/projectStorage";
+import { databaseService } from "../../../../services/databaseService";
 export default function CrudFilesListPage() {
   const router = useRouter();
   const params = useParams();
@@ -17,16 +18,14 @@ export default function CrudFilesListPage() {
   const [tableName, setTableName] = useState("");
   const [availableTables, setAvailableTables] = useState([]);
   const [selectedImportTable, setSelectedImportTable] = useState("");
+  const [premiumType, setPremiumType] = useState("default");
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [fileToDelete, setFileToDelete] = useState(null);
   const fetchAvailableTables = async (dbName) => {
     try {
-      const res = await fetch(`/api/database/tables?dbName=${encodeURIComponent(dbName)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.tables) {
-          setAvailableTables(data.tables.map((t) => t.name));
-        }
+      const data = await databaseService.getTables(dbName);
+      if (data.success && data.tables) {
+        setAvailableTables(data.tables.map((t) => t.name));
       }
     } catch (err) {
       console.error("Failed to fetch tables for import:", err);
@@ -38,29 +37,36 @@ export default function CrudFilesListPage() {
     setCurrentUser(user);
     setUserRole(role);
 
-    const projs = getProjectsForUser(user, role);
-    setAllProjects(projs);
-    const found = projs.find((p) => p.id === projectId);
-    if (found) {
-      setProject(found);
-      if (found.databaseName) {
-        fetchAvailableTables(found.databaseName);
+    const loadData = () => {
+      const projs = getProjectsForUser(user, role);
+      setAllProjects(projs);
+      const found = projs.find((p) => p.id === projectId);
+      if (found) {
+        setProject(found);
+        if (found.databaseName) {
+          fetchAvailableTables(found.databaseName);
+        }
       }
-    }
+    };
+
+    loadData();
+
+    window.addEventListener('projects_synced', loadData);
+    return () => {
+      window.removeEventListener('projects_synced', loadData);
+    };
   }, [projectId]);
   const handleCreateFile = async (e) => {
     e.preventDefault();
     if (!project || !fileName.trim()) return;
-    const formattedFileName = fileName.trim().toLowerCase().replace(/\s+/g, "_");
-    const formattedTableName = tableName.trim().toLowerCase().replace(/\s+/g, "_") || selectedImportTable || formattedFileName;
+    const formattedFileName = fileName.trim().toLowerCase().replace(/[\s-]+/g, "_");
+    const formattedTableName = tableName.trim().toLowerCase().replace(/[\s-]+/g, "_") || selectedImportTable || formattedFileName;
     let columns = [];
     if (selectedImportTable) {
       try {
-        const res = await fetch(`/api/database/tables?dbName=${encodeURIComponent(project.databaseName)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.tables) {
-            const matchedTbl = data.tables.find((t) => t.name === selectedImportTable);
+        const data = await databaseService.getTables(project.databaseName);
+        if (data.success && data.tables) {
+          const matchedTbl = data.tables.find((t) => t.name === selectedImportTable);
             if (matchedTbl && matchedTbl.columns) {
               columns = matchedTbl.columns.map((c) => {
                 let mappedType = "text";
@@ -86,7 +92,6 @@ export default function CrudFilesListPage() {
               });
             }
           }
-        }
       } catch (err) {
         console.error("Failed to import table columns", err);
       }
@@ -97,6 +102,7 @@ export default function CrudFilesListPage() {
       tableName: formattedTableName,
       dbConnectCode: `// Connect to ${project.databaseName}`,
       createdAt: (/* @__PURE__ */ new Date()).toLocaleDateString(),
+      premiumType,
       columns: columns.length > 0 ? columns : [
         { id: "col_1", name: "title", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
         { id: "col_2", name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
@@ -111,7 +117,8 @@ export default function CrudFilesListPage() {
         deleteButton: true,
         excelImport: true,
         excelExport: true,
-        recycleBin: false
+        recycleBin: false,
+        apiTarget: "admin"
       }
     };
     const updatedFiles = [...project.files || [], newFile];
@@ -124,6 +131,7 @@ export default function CrudFilesListPage() {
     setFileName("");
     setTableName("");
     setSelectedImportTable("");
+    setPremiumType("default");
   };
   const confirmDeleteFile = (fileId, name) => {
     setFileToDelete({ id: fileId, name });
@@ -291,8 +299,8 @@ export default function CrudFilesListPage() {
     placeholder="Products"
     required
     value={fileName}
-    onChange={(e) => setFileName(e.target.value.toLowerCase().replace(/\s+/g, "_"))}
-    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none" }}
+    onChange={(e) => setFileName(e.target.value.toLowerCase().replace(/[\s-]+/g, "_"))}
+    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
   />
                 </div>
 
@@ -306,7 +314,7 @@ export default function CrudFilesListPage() {
       setTableName(val);
       setSelectedImportTable(val);
     }}
-    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none" }}
+    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
   >
                       <option value="">-- Select Database Table --</option>
                       {availableTables.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -314,8 +322,8 @@ export default function CrudFilesListPage() {
     type="text"
     placeholder="product"
     value={tableName}
-    onChange={(e) => setTableName(e.target.value.toLowerCase().replace(/\s+/g, "_"))}
-    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none" }}
+    onChange={(e) => setTableName(e.target.value.toLowerCase().replace(/[\s-]+/g, "_"))}
+    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
   />}
                 </div>
 
@@ -324,12 +332,30 @@ export default function CrudFilesListPage() {
                     <select
     value={selectedImportTable}
     onChange={(e) => setSelectedImportTable(e.target.value)}
-    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none" }}
+    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
   >
                       <option value="">-- Do Not Import (Create Sample Columns) --</option>
                       {availableTables.map((t) => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>}
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-muted)" }}>Map to Premium Page Template:</label>
+                  <select
+    value={premiumType}
+    onChange={(e) => setPremiumType(e.target.value)}
+    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
+  >
+                    <option value="default">Default Standard CRUD</option>
+                    <option value="master-form">Master Form Inputs</option>
+                    <option value="portfolio">Portfolio Cards</option>
+                    <option value="products">Products List</option>
+                    <option value="categories">Categories Folder</option>
+                    <option value="orders">Orders / Receipts</option>
+                    <option value="settings">Settings Configs</option>
+                    <option value="admins">Admins System</option>
+                  </select>
+                </div>
 
               </div>
               

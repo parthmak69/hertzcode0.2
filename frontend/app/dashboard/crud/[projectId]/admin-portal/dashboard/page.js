@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useToast } from "../../../../../context/ToastContext";
+import { databaseService } from "../../../../../../services/databaseService";
+import { crudService } from "../../../../../../services/crudService";
 export default function PortalDashboardPage() {
   const { showToast } = useToast();
   const router = useRouter();
@@ -18,6 +20,39 @@ export default function PortalDashboardPage() {
   const [isLoadingSchemas, setIsLoadingSchemas] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [showViewModal, setShowViewModal] = useState(null);
+  const [lookupOptions, setLookupOptions] = useState({});
+
+  const getItemId = (item, idx = 0) => {
+    if (!item) return String(idx + 1);
+
+    // 1. Check activeSchema primary key column definition
+    if (activeSchema && Array.isArray(activeSchema.columns)) {
+      const pkCol = activeSchema.columns.find(c => c.isPrimaryKey || c.index === "PRIMARY KEY");
+      if (pkCol && item[pkCol.name] !== undefined && item[pkCol.name] !== null) {
+        return String(item[pkCol.name]);
+      }
+    }
+
+    // 2. Direct property matches
+    if (item.id !== undefined && item.id !== null) return String(item.id);
+    if (item._id !== undefined && item._id !== null) return String(item._id);
+    if (item.ID !== undefined && item.ID !== null) return String(item.ID);
+
+    // 3. Look for any key containing or ending with 'id'
+    const idKey = Object.keys(item).find(k => k.toLowerCase().includes("id"));
+    if (idKey && item[idKey] !== undefined && item[idKey] !== null) {
+      return String(item[idKey]);
+    }
+
+    // 4. Fallback to first property value
+    const firstKey = Object.keys(item)[0];
+    if (firstKey && item[firstKey] !== undefined && item[firstKey] !== null) {
+      return String(item[firstKey]);
+    }
+
+    return String(idx + 1);
+  };
+
   useEffect(() => {
     const isLoggedIn = sessionStorage.getItem(`portal_logged_in_${projectId}`);
     if (isLoggedIn !== "true") {
@@ -25,25 +60,31 @@ export default function PortalDashboardPage() {
     }
   }, [projectId]);
   useEffect(() => {
-    const stored = localStorage.getItem("crudProjects");
-    if (stored) {
-      try {
-        const projs = JSON.parse(stored);
-        const found = projs.find((p) => p.id === projectId);
-        if (found) {
-          setProject(found);
-          loadSchemasFromDisk(found.directory);
+    let foundProj = null;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith("crudProjects_") || key === "crudProjects")) {
+        try {
+          const list = JSON.parse(localStorage.getItem(key)) || [];
+          const found = list.find((p) => p.id === projectId);
+          if (found) {
+            foundProj = found;
+            break;
+          }
+        } catch (e) {
+          console.error("Failed to parse " + key, e);
         }
-      } catch (e) {
-        console.error("Failed to parse projects", e);
       }
+    }
+    if (foundProj) {
+      setProject(foundProj);
+      loadSchemasFromDisk(foundProj.directory);
     }
   }, [projectId]);
   const loadSchemasFromDisk = async (dirPath) => {
     setIsLoadingSchemas(true);
     try {
-      const res = await fetch(`/api/crud/schemas?directory=${encodeURIComponent(dirPath)}`);
-      const data = await res.json();
+      const data = await crudService.getSchemas(dirPath);
       if (data.success && data.schemas) {
         setSchemas(data.schemas);
         if (data.schemas.length > 0) {
@@ -69,10 +110,7 @@ export default function PortalDashboardPage() {
     if (!project || !activeSchema) return;
     setIsLoading(true);
     try {
-      const res = await fetch(
-        `/api/database/tables/rows?dbName=${encodeURIComponent(project.databaseName)}&tableName=${encodeURIComponent(activeSchema.tableName)}`
-      );
-      const data = await res.json();
+      const data = await databaseService.getTableRows(project.databaseName, activeSchema.tableName);
       if (data.success) {
         let rows = data.rows || [];
         const orderKey = `custom_order_${projectId}_${activeSchema.tableName}`;
@@ -80,8 +118,8 @@ export default function PortalDashboardPage() {
         if (storedOrder) {
           const idOrder = JSON.parse(storedOrder);
           rows.sort((a, b) => {
-            const aId = String(a._id || a.id);
-            const bId = String(b._id || b.id);
+            const aId = getItemId(a);
+            const bId = getItemId(b);
             const aIndex = idOrder.indexOf(aId);
             const bIndex = idOrder.indexOf(bId);
             if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
@@ -103,24 +141,49 @@ export default function PortalDashboardPage() {
       fetchRecords();
     }
   }, [project, activeSchema]);
+  const loadLookupOptions = async (schema, currentProject) => {
+    if (!schema || !currentProject) return;
+    schema.columns.forEach(async (col) => {
+      if (col.type === "select" && col.selectType === "table" && col.selectLookupTable) {
+        try {
+          const data = await databaseService.getTableRows(currentProject.databaseName, col.selectLookupTable);
+          if (data.success && data.rows) {
+            const opts = data.rows.map((row) => ({
+              value: String(row[col.selectLookupValue || "id"] ?? ""),
+              label: String(row[col.selectLookupLabel || "name"] ?? row[col.selectLookupValue || "id"] ?? "")
+            }));
+            setLookupOptions((prev) => ({
+              ...prev,
+              [col.name]: opts
+            }));
+          }
+        } catch (err) {
+          console.error("Failed to load lookup options for " + col.name, err);
+        }
+      }
+    });
+  };
+  useEffect(() => {
+    if (project && activeSchema) {
+      loadLookupOptions(activeSchema, project);
+    }
+  }, [project, activeSchema]);
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!project || !activeSchema) return;
-    const method = editingId ? "PUT" : "POST";
-    const payload = {
-      dbName: project.databaseName,
-      tableName: activeSchema.tableName,
-      id: editingId,
-      record: form
-    };
+    const username = typeof window !== "undefined" ? localStorage.getItem("currentUser") || "admin" : "admin";
+
+    // Clean payload by mapping empty strings to null for strict SQL fields
+    const cleanedForm = {};
+    Object.keys(form).forEach((k) => {
+      cleanedForm[k] = form[k] === "" ? null : form[k];
+    });
+
     try {
-      const res = await fetch("/api/database/tables/rows", {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = editingId
+        ? await databaseService.updateTableRow(project.databaseName, activeSchema.tableName, editingId, cleanedForm, username)
+        : await databaseService.insertTableRow(project.databaseName, activeSchema.tableName, cleanedForm, username);
+      if (data.success) {
         showToast(editingId ? "Record updated successfully!" : "Record inserted successfully!", "success");
         const resetForm = {};
         activeSchema.columns.forEach((col) => {
@@ -137,11 +200,23 @@ export default function PortalDashboardPage() {
     }
   };
   const handleEdit = (item) => {
-    setEditingId(item.id || item._id);
+    setEditingId(getItemId(item));
     const updatedForm = {};
     if (activeSchema) {
       activeSchema.columns.forEach((col) => {
-        updatedForm[col.name] = item[col.name] !== void 0 ? item[col.name] : col.type === "checkbox" ? false : col.type === "number" ? 0 : "";
+        let val = item[col.name];
+        if (col.type === "date" && val) {
+          try {
+            const d = new Date(val);
+            if (!isNaN(d.getTime())) {
+              const year = d.getFullYear();
+              const month = String(d.getMonth() + 1).padStart(2, "0");
+              const day = String(d.getDate()).padStart(2, "0");
+              val = `${year}-${month}-${day}`;
+            }
+          } catch (e) {}
+        }
+        updatedForm[col.name] = val !== void 0 ? val : col.type === "checkbox" ? false : col.type === "number" ? 0 : "";
       });
       setForm(updatedForm);
     }
@@ -150,12 +225,9 @@ export default function PortalDashboardPage() {
     if (!project || !activeSchema) return;
     if (!confirm("Are you sure you want to delete this record?")) return;
     try {
-      const res = await fetch(
-        `/api/database/tables/rows?dbName=${encodeURIComponent(project.databaseName)}&tableName=${encodeURIComponent(activeSchema.tableName)}&id=${encodeURIComponent(id)}`,
-        { method: "DELETE" }
-      );
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const username = typeof window !== "undefined" ? localStorage.getItem("currentUser") || "admin" : "admin";
+      const data = await databaseService.deleteTableRow(project.databaseName, activeSchema.tableName, id, username);
+      if (data.success) {
         showToast("Record deleted successfully", "success");
         fetchRecords();
       } else {
@@ -167,14 +239,14 @@ export default function PortalDashboardPage() {
   };
   const handleMoveToTop = (item) => {
     if (!activeSchema) return;
-    const itemId = String(item._id || item.id);
-    const allIds = items.map((x) => String(x._id || x.id));
+    const itemId = getItemId(item);
+    const allIds = items.map((x) => getItemId(x));
     const filteredIds = allIds.filter((id) => id !== itemId);
     const newOrder = [itemId, ...filteredIds];
     const orderKey = `custom_order_${projectId}_${activeSchema.tableName}`;
     localStorage.setItem(orderKey, JSON.stringify(newOrder));
     const updatedItems = [...items];
-    const itemIndex = updatedItems.findIndex((x) => String(x._id || x.id) === itemId);
+    const itemIndex = updatedItems.findIndex((x) => getItemId(x) === itemId);
     if (itemIndex > -1) {
       const [movedItem] = updatedItems.splice(itemIndex, 1);
       updatedItems.unshift(movedItem);
@@ -203,7 +275,7 @@ export default function PortalDashboardPage() {
     }
     const sortedItems = [...matched, ...unmatched];
     const orderKey = `custom_order_${projectId}_${activeSchema.tableName}`;
-    const newOrder = sortedItems.map((x) => String(x._id || x.id));
+    const newOrder = sortedItems.map((x) => getItemId(x));
     localStorage.setItem(orderKey, JSON.stringify(newOrder));
     setItems(sortedItems);
     showToast(`Moved ${matched.length} item(s) matching '${keyword}' to the top!`, "success");
@@ -216,7 +288,7 @@ export default function PortalDashboardPage() {
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     const orderKey = `custom_order_${projectId}_${activeSchema.tableName}`;
-    const newOrder = shuffled.map((x) => String(x._id || x.id));
+    const newOrder = shuffled.map((x) => getItemId(x));
     localStorage.setItem(orderKey, JSON.stringify(newOrder));
     setItems(shuffled);
   };
@@ -256,7 +328,7 @@ export default function PortalDashboardPage() {
         <div style={styles.headerRight}>
           <span style={styles.userBadge}>Administrator</span>
           <button onClick={handleLogout} style={styles.logoutBtn}>Logout</button>
-          <button onClick={() => window.close()} style={styles.backBtn}>Exit Portal</button>
+          <button onClick={() => router.push(`/dashboard/crud/${projectId}`)} style={styles.backBtn}>Exit Portal</button>
         </div>
       </header>
 
@@ -327,6 +399,10 @@ export default function PortalDashboardPage() {
       />
                         </div>;
     } else if (col.type === "select") {
+      const isTableType = col.selectType === "table";
+      const options = isTableType 
+        ? (lookupOptions[col.name] || []) 
+        : (col.selectOptions || []).map((opt) => ({ value: opt, label: opt }));
       return <div key={col.id} style={styles.formGroup}>
                           <label style={styles.fieldLabel}>{col.name} {col.isRequired && "*"}</label>
                           <select
@@ -336,7 +412,7 @@ export default function PortalDashboardPage() {
         style={styles.select}
       >
                             <option value="">-- Select --</option>
-                            {col.selectOptions?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                            {options.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                           </select>
                         </div>;
     } else {
@@ -422,45 +498,154 @@ export default function PortalDashboardPage() {
                         <tr style={styles.thRow}>
                           <th style={styles.th}>#</th>
                           <th style={styles.th}>{isMongo ? "_id" : "id"}</th>
-                          {activeSchema.columns.filter((c) => c.isListCol !== false).map((col) => <th key={col.id} style={styles.th}>{col.name}</th>)}
+                          {activeSchema.columns.filter((c) => c.isListCol !== false && c.name.toLowerCase() !== "id" && c.name.toLowerCase() !== "_id").map((col) => <th key={col.id} style={styles.th}>{col.name}</th>)}
                           <th style={styles.th}>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredItems.map((item, idx) => <tr key={item._id || item.id || idx} style={styles.tr}>
-                            <td style={styles.tdIndex}>{idx + 1}</td>
-                            <td style={styles.tdId} title={String(item._id || item.id)}>
-                              {String(item._id || item.id)}
-                            </td>
-                            {activeSchema.columns.filter((c) => c.isListCol !== false).map((col) => {
-    const val = item[col.name];
-    const isImg = isImageUrl(col.name, val);
-    return <td key={col.id} style={styles.td}>
-                                  {isImg ? <img
-      src={String(val)}
-      alt={col.name}
-      style={styles.thumbnail}
-      onError={(e) => {
-        e.currentTarget.style.display = "none";
-      }}
-    /> : String(val !== void 0 && val !== null ? val : "")}
-                                </td>;
-  })}
-                            <td style={styles.tdActions}>
-                              <div style={styles.actionsBox}>
-                                <button
-    onClick={() => handleMoveToTop(item)}
-    style={styles.topLink}
-    title="Move this item to top"
-  >
-                                  ▲ Top
-                                </button>
-                                {activeSchema.settings.viewButton && <button onClick={() => setShowViewModal(item)} style={styles.viewLink}>View</button>}
-                                {activeSchema.settings.editButton && <button onClick={() => handleEdit(item)} style={styles.editLink}>Edit</button>}
-                                {activeSchema.settings.deleteButton && <button onClick={() => handleDelete(item._id || item.id)} style={styles.deleteLink}>Delete</button>}
-                              </div>
-                            </td>
-                          </tr>)}
+                        {filteredItems.map((item, idx) => {
+                          const recordId = getItemId(item, idx);
+                          return (
+                            <tr key={recordId} style={styles.tr}>
+                              <td style={styles.tdIndex}>{idx + 1}</td>
+                              <td style={styles.tdId} title={recordId}>
+                                {recordId}
+                              </td>
+                              {activeSchema.columns.filter((c) => c.isListCol !== false && c.name.toLowerCase() !== "id" && c.name.toLowerCase() !== "_id").map((col) => {
+                                const val = item[col.name];
+                                const isImg = isImageUrl(col.name, val);
+                                
+                                let displayVal = "";
+                                if (val !== undefined && val !== null) {
+                                  if (typeof val === "boolean") {
+                                    displayVal = val ? "true" : "false";
+                                  } else if (typeof val === "object") {
+                                    if (val.type === "Buffer" && Array.isArray(val.data)) {
+                                      // Convert BIT/TINYINT binary buffer values to readable booleans
+                                      displayVal = val.data[0] === 1 ? "true" : val.data[0] === 0 ? "false" : JSON.stringify(val);
+                                    } else {
+                                      displayVal = JSON.stringify(val);
+                                    }
+                                  } else {
+                                    displayVal = String(val);
+                                  }
+                                }
+                                
+                                // Format dates nicely
+                                if (col.type === "date" || col.type === "datetime-local" || col.type === "time") {
+                                  if (val) {
+                                    try {
+                                      const dObj = new Date(val);
+                                      if (!isNaN(dObj.getTime())) {
+                                        displayVal = col.type === "date" ? dObj.toLocaleDateString() : dObj.toLocaleString();
+                                      }
+                                    } catch (e) {}
+                                  }
+                                }
+
+                                return (
+                                  <td key={col.id} style={styles.td}>
+                                    {isImg ? (
+                                      <img
+                                        src={String(val)}
+                                        alt={col.name}
+                                        style={styles.thumbnail}
+                                        onError={(e) => {
+                                          e.currentTarget.style.display = "none";
+                                        }}
+                                      />
+                                    ) : (
+                                      displayVal
+                                    )}
+                                  </td>
+                                );
+                              })}
+                              <td style={styles.tdActions}>
+                                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                                  <button
+                                    onClick={() => handleMoveToTop(item)}
+                                    style={{
+                                      border: "none",
+                                      background: "#059669",
+                                      color: "white",
+                                      cursor: "pointer",
+                                      padding: "5px 10px",
+                                      borderRadius: "6px",
+                                      fontSize: "11px",
+                                      fontWeight: "bold",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "4px"
+                                    }}
+                                    title="Move this item to top"
+                                  >
+                                    ▲ Top
+                                  </button>
+                                  {activeSchema.settings.viewButton && (
+                                    <button 
+                                      onClick={() => setShowViewModal(item)} 
+                                      style={{
+                                        border: "none",
+                                        background: "#2563eb",
+                                        color: "white",
+                                        cursor: "pointer",
+                                        padding: "5px 10px",
+                                        borderRadius: "6px",
+                                        fontSize: "11px",
+                                        fontWeight: "bold",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "4px"
+                                      }}
+                                    >
+                                      View
+                                    </button>
+                                  )}
+                                  {activeSchema.settings.editButton && (
+                                    <button 
+                                      onClick={() => handleEdit(item)} 
+                                      style={{
+                                        border: "none",
+                                        background: "#d97706",
+                                        color: "white",
+                                        cursor: "pointer",
+                                        padding: "5px 10px",
+                                        borderRadius: "6px",
+                                        fontSize: "11px",
+                                        fontWeight: "bold",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "4px"
+                                      }}
+                                    >
+                                      Edit
+                                    </button>
+                                  )}
+                                  {activeSchema.settings.deleteButton && (
+                                    <button 
+                                      onClick={() => handleDelete(recordId)} 
+                                      style={{
+                                        border: "none",
+                                        background: "#dc2626",
+                                        color: "white",
+                                        cursor: "pointer",
+                                        padding: "5px 10px",
+                                        borderRadius: "6px",
+                                        fontSize: "11px",
+                                        fontWeight: "bold",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "4px"
+                                      }}
+                                    >
+                                      Delete
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>}
@@ -766,10 +951,11 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: "20px",
-    gap: "16px"
+    gap: "16px",
+    flexWrap: "wrap"
   },
   searchBar: {
-    width: "240px",
+    width: "200px",
     padding: "8px 12px",
     backgroundColor: "#0f172a",
     border: "1px solid #475569",

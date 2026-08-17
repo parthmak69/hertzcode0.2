@@ -1,8 +1,9 @@
-"use strict";
 "use client";
+"use strict";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useToast } from "../../../../context/ToastContext";
+import { databaseService } from "../../../../../services/databaseService";
 export default function TableDetailPage() {
   const { showToast } = useToast();
   const router = useRouter();
@@ -20,8 +21,7 @@ export default function TableDetailPage() {
   const fetchRows = async () => {
     setIsLoadingRows(true);
     try {
-      const res = await fetch(`/api/database/tables/rows?dbName=${encodeURIComponent(dbName)}&tableName=${encodeURIComponent(tableName)}`);
-      const data = await res.json();
+      const data = await databaseService.getTableRows(dbName, tableName);
       if (data.success) {
         setRows(data.rows || []);
         setFields(data.fields || []);
@@ -35,18 +35,8 @@ export default function TableDetailPage() {
   const fetchTableDetails = async () => {
     if (!dbName || !tableName) return;
     try {
-      const res = await fetch(`/api/database/tables?dbName=${encodeURIComponent(dbName)}`);
-      const responseText = await res.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        console.error("Non-JSON table details:", responseText);
-        showToast("Error loading table details", "error");
-        router.push("/dashboard");
-        return;
-      }
-      if (res.ok && data.success) {
+      const data = await databaseService.getTables(dbName);
+      if (data.success) {
         const found = data.tables.find((t) => t.name === tableName);
         if (found) {
           setTable(found);
@@ -75,27 +65,8 @@ export default function TableDetailPage() {
   const handleSeedTable = async () => {
     if (!dbName || !tableName || !table) return;
     try {
-      const res = await fetch("/api/database/tables/seed", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dbName,
-          tableName,
-          count: fakerMockCount,
-          mappings: fakerMappings,
-          customValues
-        })
-      });
-      const responseText = await res.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (err) {
-        console.error("Non-JSON response for table seeding:", responseText);
-        showToast(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`, "error");
-        return;
-      }
-      if (res.ok && data.success) {
+      const data = await databaseService.seedTable(dbName, tableName, fakerMockCount, fakerMappings, customValues);
+      if (data.success) {
         await fetchTableDetails();
         await fetchRows();
         setActiveView("browse");
@@ -118,7 +89,7 @@ export default function TableDetailPage() {
       {
     /* SUB NAV BAR BANNER */
   }
-      <div style={{ height: "40px", backgroundColor: "var(--bannerBg)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", color: "white", fontSize: "13px", fontWeight: "600", flexShrink: 0, boxShadow: "0 2px 6px rgba(0,0,0,0.05)" }}>
+      <div style={{ height: "40px", backgroundColor: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", color: "white", fontSize: "13px", fontWeight: "600", flexShrink: 0, boxShadow: "0 2px 6px rgba(0,0,0,0.05)" }}>
         <span style={{ fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.8px" }}>
           {dbName.startsWith('mongodb:') ? 'Collection Details' : 'Table Structure & Data'}
         </span>
@@ -224,52 +195,33 @@ export default function TableDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {table.idOption && <tr style={{ borderBottom: "1px solid var(--border-color)", opacity: 0.8 }}>
-                        <td style={{ padding: "14px 16px", fontFamily: "monospace", color: "var(--text-primary)" }}>id (Auto)</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>INT</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>11</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>PRIMARY KEY</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>AUTO_INCREMENT</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-muted)" }}>ID Auto Generated</td>
-                      </tr>}
-
-                    {table.columns.map((col, idx) => <tr key={idx} style={{ borderBottom: "1px solid var(--border-color)" }}>
-                        <td style={{ padding: "14px 16px", fontFamily: "monospace", fontWeight: "bold", color: "var(--text-primary)" }}>
-                          {col.name}
-                        </td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{col.type}</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{col.size || "---"}</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{col.index}</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{col.defaultValue}</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-muted)" }}>{col.comment || "---"}</td>
-                      </tr>)}
-
-                    {table.createdOnOption && <tr style={{ borderBottom: "1px solid var(--border-color)", opacity: 0.8 }}>
-                        <td style={{ padding: "14px 16px", fontFamily: "monospace", color: "var(--text-primary)" }}>createdOn</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>DATETIME</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>---</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>---</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>CURRENT_TIMESTAMP</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-muted)" }}>Creation Timestamp</td>
-                      </tr>}
-
-                    {table.modifiedOnOption && <tr style={{ borderBottom: "1px solid var(--border-color)", opacity: 0.8 }}>
-                        <td style={{ padding: "14px 16px", fontFamily: "monospace", color: "var(--text-primary)" }}>modifiedOn</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>DATETIME</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>---</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>---</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>ON UPDATE CURRENT_TIMESTAMP</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-muted)" }}>Modification Timestamp</td>
-                      </tr>}
-
-                    {table.isDeletedOption && <tr style={{ borderBottom: "1px solid var(--border-color)", opacity: 0.8 }}>
-                        <td style={{ padding: "14px 16px", fontFamily: "monospace", color: "var(--text-primary)" }}>isDeleted</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>TINYINT</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>1</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>---</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>0</td>
-                        <td style={{ padding: "14px 16px", color: "var(--text-muted)" }}>Soft delete flag</td>
-                      </tr>}
+                    {(() => {
+                      const userCols = table.columns.filter(col => {
+                        const name = col.name.toLowerCase();
+                        return !["id", "deletedon", "createdon", "modifiedon", "isdeleted", "created_at", "updated_at", "is_deleted"].includes(name);
+                      });
+                      if (userCols.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={6} style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>
+                              No user-defined columns in this table (only system columns exist).
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return userCols.map((col, idx) => (
+                        <tr key={idx} style={{ borderBottom: "1px solid var(--border-color)" }}>
+                          <td style={{ padding: "14px 16px", fontFamily: "monospace", fontWeight: "bold", color: "var(--text-primary)" }}>
+                            {col.name}
+                          </td>
+                          <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{col.type}</td>
+                          <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{col.size || "---"}</td>
+                          <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{col.index}</td>
+                          <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{col.defaultValue}</td>
+                          <td style={{ padding: "14px 16px", color: "var(--text-muted)" }}>{col.comment || "---"}</td>
+                        </tr>
+                      ));
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -303,7 +255,10 @@ export default function TableDetailPage() {
                     <thead>
                       <tr style={{ borderBottom: "2px solid var(--border-color)", backgroundColor: "var(--bg-tertiary)" }}>
                         <th style={{ padding: "12px 16px", color: "var(--text-secondary)", fontWeight: 600, width: "60px" }}>#</th>
-                        {fields.map((field) => <th key={field} style={{ padding: "12px 16px", color: "var(--text-secondary)", fontWeight: 600, fontFamily: "monospace" }}>
+                        {fields.filter(field => {
+                          const name = field.toLowerCase();
+                          return !["id", "deletedon", "createdon", "modifiedon", "isdeleted", "created_at", "updated_at", "is_deleted"].includes(name);
+                        }).map((field) => <th key={field} style={{ padding: "12px 16px", color: "var(--text-secondary)", fontWeight: 600, fontFamily: "monospace" }}>
                             {field}
                           </th>)}
                       </tr>
@@ -311,28 +266,31 @@ export default function TableDetailPage() {
                     <tbody>
                       {rows.map((row, idx) => <tr key={row._id || idx} style={{ borderBottom: "1px solid var(--border-color)" }}>
                           <td style={{ padding: "12px 16px", color: "var(--text-muted)", fontSize: "13px" }}>{idx + 1}</td>
-                          {fields.map((field) => {
-    const val = row[field];
-    let displayVal = "";
-    if (val === null || val === void 0) {
-      displayVal = "NULL";
-    } else if (typeof val === "object") {
-      displayVal = JSON.stringify(val);
-    } else {
-      displayVal = String(val);
-    }
-    return <td key={field} style={{
-      padding: "12px 16px",
-      color: val === null ? "var(--text-muted)" : "var(--text-primary)",
-      fontStyle: val === null ? "italic" : "normal",
-      whiteSpace: "nowrap",
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      maxWidth: "300px"
-    }}>
-                                {displayVal}
-                              </td>;
-  })}
+                          {fields.filter(field => {
+                            const name = field.toLowerCase();
+                            return !["id", "deletedon", "createdon", "modifiedon", "isdeleted", "created_at", "updated_at", "is_deleted"].includes(name);
+                          }).map((field) => {
+                            const val = row[field];
+                            let displayVal = "";
+                            if (val === null || val === void 0) {
+                              displayVal = "NULL";
+                            } else if (typeof val === "object") {
+                              displayVal = JSON.stringify(val);
+                            } else {
+                              displayVal = String(val);
+                            }
+                            return <td key={field} style={{
+                              padding: "12px 16px",
+                              color: val === null ? "var(--text-muted)" : "var(--text-primary)",
+                              fontStyle: val === null ? "italic" : "normal",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              maxWidth: "300px"
+                            }}>
+                              {displayVal}
+                            </td>;
+                          })}
                         </tr>)}
                     </tbody>
                   </table>
@@ -356,7 +314,10 @@ export default function TableDetailPage() {
   />
                   </div>
 
-                  {table.columns.map((col, idx) => <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {table.columns.filter(col => {
+                    const name = col.name.toLowerCase();
+                    return !["id", "deletedon", "createdon", "modifiedon", "isdeleted", "created_at", "updated_at", "is_deleted"].includes(name);
+                  }).map((col, idx) => <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                       <label style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-muted)", fontFamily: "monospace" }}>{col.name}:</label>
                       <select
     value={fakerMappings[col.name] || "As Defined"}

@@ -1,14 +1,16 @@
-"use strict";
 "use client";
+"use strict";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "../../context/ToastContext";
 import { getProjectsForUser, saveProjectsForUser } from "../../utils/projectStorage";
+import { adminService } from "../../../services/adminService";
 
 export default function RecycleBinPage() {
   const { showToast } = useToast();
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState("");
+  const [currentUserRole, setCurrentUserRole] = useState("user");
   const [activeTab, setActiveTab] = useState("databases");
   
   // Backend recycled items (databases, tables)
@@ -28,13 +30,10 @@ export default function RecycleBinPage() {
     setIsLoading(true);
     try {
       // 1. Load SQL/NoSQL databases & tables from backend
-      const res = await fetch(`/api/database/recycle-bin/list?username=${encodeURIComponent(user)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.items) {
-          setRecycledDbs(data.items.filter((item) => item.item_type === "database"));
-          setRecycledTables(data.items.filter((item) => item.item_type === "table"));
-        }
+      const data = await adminService.getRecycledItems(user);
+      if (data.success && data.items) {
+        setRecycledDbs(data.items.filter((item) => item.item_type === "database"));
+        setRecycledTables(data.items.filter((item) => item.item_type === "table"));
       }
 
       // 2. Load projects and files from localStorage
@@ -71,22 +70,20 @@ export default function RecycleBinPage() {
 
   useEffect(() => {
     const user = localStorage.getItem("currentUser") || localStorage.getItem("rememberedEmail") || "";
+    const role = localStorage.getItem("currentUserRole") || "user";
     setCurrentUser(user);
+    setCurrentUserRole(role);
     if (user) {
       loadRecycledItems(user);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRestore = async (item) => {
     try {
       if (item.type === "database" || item.type === "table") {
-        const res = await fetch("/api/database/recycle-bin/restore", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: item.id, username: currentUser }),
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
+        const data = await adminService.restoreRecycledItem(item.id, currentUser);
+        if (data.success) {
           showToast(`Restored "${item.name}" successfully!`, "success");
           loadRecycledItems(currentUser);
         } else {
@@ -130,7 +127,7 @@ export default function RecycleBinPage() {
   };
 
   const confirmPermanentDelete = (id, name, type, parentProjectName = "", parentProjectId = "") => {
-    if (currentUser !== "admin") {
+    if (currentUserRole !== "admin") {
       showToast("Only administrators are authorized to permanently delete items.", "warning");
       return;
     }
@@ -142,13 +139,8 @@ export default function RecycleBinPage() {
     if (!itemToDelete) return;
     try {
       if (itemToDelete.type === "database" || itemToDelete.type === "table") {
-        const res = await fetch("/api/database/recycle-bin/permanent-delete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: itemToDelete.id, username: currentUser }),
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
+        const data = await adminService.permanentlyDeleteRecycledItem(itemToDelete.id, currentUser);
+        if (data.success) {
           showToast(`Permanently deleted ${itemToDelete.type} "${itemToDelete.name}"!`, "success");
           loadRecycledItems(currentUser);
         } else {
@@ -224,18 +216,18 @@ export default function RecycleBinPage() {
                     </button>
                     <button
                       onClick={() => confirmPermanentDelete(item.id, item.item_name, "database")}
-                      disabled={currentUser !== "admin"}
+                      disabled={currentUserRole !== "admin"}
                       style={{
-                        backgroundColor: currentUser === "admin" ? "#ef4444" : "var(--bg-tertiary)",
-                        color: currentUser === "admin" ? "white" : "var(--text-muted)",
+                        backgroundColor: currentUserRole === "admin" ? "#ef4444" : "var(--bg-tertiary)",
+                        color: currentUserRole === "admin" ? "white" : "var(--text-muted)",
                         border: "none",
                         padding: "6px 12px",
                         borderRadius: "4px",
-                        cursor: currentUser === "admin" ? "pointer" : "not-allowed",
+                        cursor: currentUserRole === "admin" ? "pointer" : "not-allowed",
                         fontSize: "12px",
                         fontWeight: "bold",
                       }}
-                      title={currentUser !== "admin" ? "Only administrator can permanently delete" : "Delete permanently"}
+                      title={currentUserRole !== "admin" ? "Only administrator can permanently delete" : "Delete permanently"}
                     >
                       Delete
                     </button>
@@ -471,7 +463,7 @@ export default function RecycleBinPage() {
                 Databases, tables, projects, and files can be restored here. Only <strong>admin</strong> can permanently delete.
               </p>
             </div>
-            {currentUser !== "admin" && (
+            {currentUserRole !== "admin" && (
               <span style={{ fontSize: "12px", color: "#eab308", backgroundColor: "rgba(234, 179, 8, 0.1)", border: "1px solid rgba(234, 179, 8, 0.2)", padding: "6px 12px", borderRadius: "6px", fontWeight: "600" }}>
                 ⚠️ Logged in as regular user (Permanent delete disabled)
               </span>

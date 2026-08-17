@@ -1,10 +1,13 @@
-"use strict";
 "use client";
+"use strict";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "./context/ToastContext";
+import { authService } from "../services/authService";
+import { useAuth } from "./context/AuthContext";
 export default function LoginPage() {
   const { showToast } = useToast();
+  const { setAuthorized, setCurrentUser, setCurrentUserRole, setCurrentUserName } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -62,13 +65,8 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: email, pass_hash: password })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await authService.login(email, password);
+      if (data.success) {
         if (rememberMe) {
           localStorage.setItem("rememberedEmail", email);
           localStorage.setItem("rememberMe", "true");
@@ -79,6 +77,12 @@ export default function LoginPage() {
         localStorage.setItem("currentUser", data.username || email);
         localStorage.setItem("currentUserName", data.name || "");
         localStorage.setItem("currentUserRole", data.role || "user");
+
+        setAuthorized(true);
+        setCurrentUser(data.username || email);
+        setCurrentUserName(data.name || "");
+        setCurrentUserRole(data.role || "user");
+
         showToast("Logged in successfully! Welcome back.", "success");
         router.push("/dashboard");
       } else {
@@ -108,7 +112,7 @@ export default function LoginPage() {
   }
         <div style={styles.card}>
           <h2 style={styles.heading}>Sign in to your account</h2>
-          <p style={styles.subheading} />
+          <p style={styles.subheading}>Please enter your credentials to continue.</p>
 
           {error && <div style={styles.errorBox}>
               <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: 7 }} />{error}

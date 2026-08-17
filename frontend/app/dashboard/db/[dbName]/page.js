@@ -1,8 +1,9 @@
-"use strict";
 "use client";
+"use strict";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useToast } from "../../../context/ToastContext";
+import { databaseService } from "../../../../services/databaseService";
 const SyncIcon = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
   </svg>;
@@ -35,10 +36,10 @@ export default function TablesListPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [tableToDelete, setTableToDelete] = useState("");
   const filteredTables = tables.filter((t) => t.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, entriesLimit);
-  const [tableIdOption, setTableIdOption] = useState(true);
-  const [tableCreatedOn, setTableCreatedOn] = useState(true);
-  const [tableModifiedOn, setTableModifiedOn] = useState(true);
-  const [tableIsDeleted, setTableIsDeleted] = useState(true);
+  const [tableIdOption, setTableIdOption] = useState(false);
+  const [tableCreatedOn, setTableCreatedOn] = useState(false);
+  const [tableModifiedOn, setTableModifiedOn] = useState(false);
+  const [tableIsDeleted, setTableIsDeleted] = useState(false);
   const [tableColumns, setTableColumns] = useState([
     { name: "", type: "VARCHAR", size: "100", index: "---", defaultValue: "NULL", comment: "" },
     { name: "", type: "VARCHAR", size: "100", index: "---", defaultValue: "NULL", comment: "" },
@@ -49,18 +50,8 @@ export default function TablesListPage() {
   const fetchTables = async () => {
     if (!dbName) return;
     try {
-      const res = await fetch(`/api/database/tables?dbName=${encodeURIComponent(dbName)}`);
-      const responseText = await res.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        console.error("Non-JSON tables list:", responseText);
-        showToast("Error loading tables list", "error");
-        router.push("/dashboard");
-        return;
-      }
-      if (res.ok && data.success) {
+      const data = await databaseService.getTables(dbName);
+      if (data.success) {
         setTables(data.tables || []);
       } else {
         showToast(data.error || "Access denied or database error.", "error");
@@ -104,21 +95,8 @@ export default function TablesListPage() {
   const handleDeleteTable = async () => {
     if (!tableToDelete) return;
     try {
-      const res = await fetch("/api/database/tables/delete", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dbName, tableName: tableToDelete, username: currentUser })
-      });
-      const responseText = await res.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (err) {
-        console.error("Non-JSON response for table deletion:", responseText);
-        showToast(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`, "error");
-        return;
-      }
-      if (res.ok && data.success) {
+      const data = await databaseService.deleteTable(dbName, tableToDelete, currentUser);
+      if (data.success) {
         await fetchTables();
         setIsDeleteModalOpen(false);
         showToast(`Table "${tableToDelete}" deleted successfully`, "success");
@@ -134,32 +112,16 @@ export default function TablesListPage() {
   const handleSaveTable = async (e) => {
     e.preventDefault();
     if (!newTableName.trim() || !dbName) return;
-    const formattedTableName = newTableName.trim().toLowerCase().replace(/\s+/g, "_");
+    const formattedTableName = newTableName.trim().toLowerCase().replace(/[\s-]+/g, "_");
     const finalCols = tableColumns.filter((c) => c.name.trim() !== "");
     try {
-      const res = await fetch("/api/database/tables/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dbName,
-          tableName: formattedTableName,
-          columns: finalCols,
-          idOption: tableIdOption,
-          createdOnOption: tableCreatedOn,
-          modifiedOnOption: tableModifiedOn,
-          isDeletedOption: tableIsDeleted
-        })
+      const data = await databaseService.createTable(dbName, formattedTableName, finalCols, {
+        idOption: tableIdOption,
+        createdOnOption: tableCreatedOn,
+        modifiedOnOption: tableModifiedOn,
+        isDeletedOption: tableIsDeleted
       });
-      const responseText = await res.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (err) {
-        console.error("Non-JSON response for table creation:", responseText);
-        showToast(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`, "error");
-        return;
-      }
-      if (res.ok && data.success) {
+      if (data.success) {
         await fetchTables();
         setIsTableModalOpen(false);
         setNewTableName("");
@@ -183,18 +145,7 @@ export default function TablesListPage() {
     if (!aiPrompt.trim()) return;
     try {
       setAiGeneratedSql("Generating schema using Gemini AI...");
-      const response = await fetch("/api/ai", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ prompt: aiPrompt, dbName })
-      });
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(errText || "Failed to generate query");
-      }
-      const data = await response.json();
+      const data = await databaseService.generateSqlWithAi(aiPrompt, dbName);
       setAiGeneratedSql(data.sql || "");
     } catch (err) {
       setAiGeneratedSql(`Error generating table structure: ${err.message}`);
@@ -215,21 +166,8 @@ export default function TablesListPage() {
       tblName = match ? match[1] : "generated_table";
     }
     try {
-      const res = await fetch("/api/database/tables/create-raw", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dbName, sql: aiGeneratedSql })
-      });
-      const responseText = await res.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (err) {
-        console.error("Non-JSON raw table SQL response:", responseText);
-        showToast(`Server error (${res.status}): ${responseText.slice(0, 200) || "Empty response"}`, "error");
-        return;
-      }
-      if (res.ok && data.success) {
+      const data = await databaseService.createTableRaw(dbName, aiGeneratedSql);
+      if (data.success) {
         await fetchTables();
         setIsAiModalOpen(false);
         setAiGeneratedSql("");
@@ -255,12 +193,7 @@ export default function TablesListPage() {
     try {
       setQueryError("");
       setQueryResult(null);
-      const res = await fetch("/api/database/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dbName, sql: sqlQuery })
-      });
-      const data = await res.json();
+      const data = await databaseService.runQuery(dbName, sqlQuery);
       if (data.success) {
         setQueryResult(data);
         setQueryError("");
@@ -292,7 +225,7 @@ export default function TablesListPage() {
       {
     /* SUB NAV BAR BANNER */
   }
-      <div style={{ height: "40px", backgroundColor: "var(--bannerBg)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", color: "white", fontSize: "13px", fontWeight: "600", flexShrink: 0, boxShadow: "0 2px 6px rgba(0,0,0,0.05)" }}>
+      <div style={{ height: "40px", backgroundColor: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", color: "white", fontSize: "13px", fontWeight: "600", flexShrink: 0, boxShadow: "0 2px 6px rgba(0,0,0,0.05)" }}>
         <span style={{ fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.8px" }}>Tables</span>
         <span style={{ color: "rgba(255,255,255,0.8)" }}>Database Builder / {dbName}</span>
       </div>
@@ -421,32 +354,12 @@ export default function TablesListPage() {
     placeholder="users"
     required
     value={newTableName}
-    onChange={(e) => setNewTableName(e.target.value.toLowerCase().replace(/\s+/g, "_"))}
+    onChange={(e) => setNewTableName(e.target.value.toLowerCase().replace(/[\s-]+/g, "_"))}
     style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none" }}
   />
                 </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <label style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-muted)" }}>Add Columns:</label>
-                  <div style={{ display: "flex", gap: "20px", fontSize: "13px", color: "var(--text-primary)" }}>
-                    <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-                      <input type="checkbox" checked={tableIdOption} onChange={(e) => setTableIdOption(e.target.checked)} />
-                      id
-                    </label>
-                    <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-                      <input type="checkbox" checked={tableCreatedOn} onChange={(e) => setTableCreatedOn(e.target.checked)} />
-                      createdOn
-                    </label>
-                    <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-                      <input type="checkbox" checked={tableModifiedOn} onChange={(e) => setTableModifiedOn(e.target.checked)} />
-                      modifiedOn
-                    </label>
-                    <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-                      <input type="checkbox" checked={tableIsDeleted} onChange={(e) => setTableIsDeleted(e.target.checked)} />
-                      isDeleted
-                    </label>
-                  </div>
-                </div>
+
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -470,7 +383,7 @@ export default function TablesListPage() {
                               value={col.name}
                               onChange={(e) => {
                                 const updated = [...tableColumns];
-                                updated[idx].name = e.target.value.toLowerCase().replace(/\s+/g, "_");
+                                updated[idx].name = e.target.value.toLowerCase().replace(/[\s-]+/g, "_");
                                 setTableColumns(updated);
                               }}
                               style={{ flex: 2, minWidth: "130px", padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "4px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "13px", outline: "none" }}

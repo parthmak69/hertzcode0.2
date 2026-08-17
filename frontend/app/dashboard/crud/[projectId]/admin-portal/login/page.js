@@ -1,36 +1,51 @@
 "use strict";
 "use client";
+
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useToast } from "../../../../../context/ToastContext";
+
 export default function PortalLoginPage() {
   const { showToast } = useToast();
   const router = useRouter();
   const params = useParams();
   const projectId = params?.projectId;
+
   const [project, setProject] = useState(null);
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("admin123");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+
   useEffect(() => {
-    const stored = localStorage.getItem("crudProjects");
-    if (stored) {
-      try {
-        const projs = JSON.parse(stored);
-        const found = projs.find((p) => p.id === projectId);
-        if (found) {
-          setProject(found);
+    let foundProj = null;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith("crudProjects_") || key === "crudProjects")) {
+        try {
+          const list = JSON.parse(localStorage.getItem(key)) || [];
+          const found = list.find((p) => p.id === projectId);
+          if (found) {
+            foundProj = found;
+            break;
+          }
+        } catch (e) {
+          console.error("Failed to parse " + key, e);
         }
-      } catch (e) {
-        console.error("Failed to parse projects", e);
       }
     }
+    if (foundProj) {
+      setProject(foundProj);
+    }
   }, [projectId]);
+
   const handleLogin = (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
+
     setTimeout(() => {
       if (username === "admin" && password === "admin123") {
         sessionStorage.setItem(`portal_logged_in_${projectId}`, "true");
@@ -43,174 +58,108 @@ export default function PortalLoginPage() {
       }
     }, 600);
   };
+
   if (!project) {
-    return <div style={styles.loading}>Loading Branded Portal...</div>;
+    return <div className="p-10 text-slate-500 text-center font-bold">Loading Branded Portal...</div>;
   }
-  return <div style={styles.wrapper}>
-      <div style={styles.card}>
-        <div style={styles.logoArea}>
-          <div style={styles.logoCircle}>
-            {project.name.slice(0, 2).toUpperCase()}
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6" style={{ backgroundColor: '#f8fafc' }}>
+      <div className="w-full max-w-md">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+          {/* Top Accent Bar */}
+          <div className="h-1.5 w-full bg-blue-600" />
+
+          <div className="p-8">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-xl bg-blue-50 flex items-center justify-center">
+                <span className="text-2xl font-extrabold text-blue-600">
+                  {project.name ? project.name.slice(0, 2).toUpperCase() : 'N'}
+                </span>
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900">
+                {project.name} Admin Panel
+              </h1>
+              <p className="mt-2 text-sm text-slate-500">
+                Sign in to access the dashboard
+              </p>
+            </div>
+
+            <form onSubmit={handleLogin} className="space-y-5">
+              {/* Error */}
+              {error && (
+                <div className="px-4 py-3 rounded-lg text-sm bg-red-50 border border-red-200 text-red-600 text-center">
+                  {error}
+                </div>
+              )}
+
+              {/* Username */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-slate-900">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition"
+                  placeholder="admin"
+                />
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-slate-900">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-4 py-3 pr-12 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition"
+                    placeholder="Enter your password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                  >
+                    <span className="text-xs font-bold">{showPassword ? 'HIDE' : 'SHOW'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Remember Me */}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-600"
+                />
+                <span className="text-sm text-slate-700">Remember me</span>
+              </label>
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 rounded-xl font-semibold bg-blue-600 text-white cursor-pointer hover:bg-blue-700 transition disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
+              >
+                {loading ? 'Authenticating...' : 'Sign In'}
+              </button>
+            </form>
           </div>
-          <h2 style={styles.title}>{project.name}</h2>
-          <p style={styles.subtitle}>Administrative Portal Login</p>
         </div>
 
-        {error && <div style={styles.errorBox}>{error}</div>}
-
-        <form onSubmit={handleLogin} style={styles.form}>
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Username</label>
-            <input
-    type="text"
-    value={username}
-    onChange={(e) => setUsername(e.target.value)}
-    style={styles.input}
-    required
-  />
-          </div>
-
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Password</label>
-            <input
-    type="password"
-    value={password}
-    onChange={(e) => setPassword(e.target.value)}
-    style={styles.input}
-    required
-  />
-          </div>
-
-          <button type="submit" disabled={loading} style={styles.button}>
-            {loading ? "Authenticating..." : "Sign In \u2794"}
-          </button>
-        </form>
-
-        <div style={styles.footer}>
-          <p>This is a custom-branded Next.js admin interface.</p>
-          <p style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>
-            Powered by Hertzcoder Schema Manager
-          </p>
-        </div>
+        <p className="text-center text-xs text-slate-500 mt-6">
+          Premium Admin Panel · Internal Preview
+        </p>
       </div>
-    </div>;
+    </div>
+  );
 }
-const styles = {
-  loading: {
-    padding: "40px",
-    color: "#64748b",
-    textAlign: "center",
-    fontSize: "15px",
-    fontWeight: "bold",
-    fontFamily: "system-ui, sans-serif"
-  },
-  wrapper: {
-    position: "fixed",
-    inset: 0,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#0f172a",
-    fontFamily: "system-ui, sans-serif",
-    padding: "20px",
-    zIndex: 9999,
-    overflowY: "auto"
-  },
-  card: {
-    backgroundColor: "#1e293b",
-    borderRadius: "16px",
-    padding: "40px 32px 32px",
-    width: "100%",
-    maxWidth: "420px",
-    boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
-    border: "1px solid #334155"
-  },
-  logoArea: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    marginBottom: "30px"
-  },
-  logoCircle: {
-    width: "56px",
-    height: "56px",
-    borderRadius: "14px",
-    backgroundColor: "#3b82f6",
-    color: "white",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "20px",
-    fontWeight: "bold",
-    marginBottom: "14px",
-    boxShadow: "0 0 20px rgba(59, 130, 246, 0.4)"
-  },
-  title: {
-    fontSize: "22px",
-    fontWeight: "bold",
-    color: "#f8fafc",
-    margin: 0
-  },
-  subtitle: {
-    fontSize: "13px",
-    color: "#94a3b8",
-    margin: "4px 0 0 0"
-  },
-  errorBox: {
-    backgroundColor: "#rgba(239, 68, 68, 0.15)",
-    border: "1px solid #ef4444",
-    color: "#fca5a5",
-    padding: "10px 12px",
-    borderRadius: "6px",
-    fontSize: "12.5px",
-    marginBottom: "20px",
-    textAlign: "center"
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px"
-  },
-  inputGroup: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "6px"
-  },
-  label: {
-    fontSize: "12px",
-    fontWeight: "bold",
-    color: "#94a3b8",
-    textTransform: "uppercase",
-    letterSpacing: "0.5px"
-  },
-  input: {
-    padding: "10px 12px",
-    backgroundColor: "#0f172a",
-    border: "1px solid #475569",
-    borderRadius: "8px",
-    color: "#f8fafc",
-    fontSize: "14px",
-    outline: "none",
-    transition: "border-color 0.15s"
-  },
-  button: {
-    backgroundColor: "#3b82f6",
-    color: "white",
-    border: "none",
-    padding: "12px",
-    borderRadius: "8px",
-    fontWeight: "bold",
-    fontSize: "15px",
-    cursor: "pointer",
-    marginTop: "10px",
-    transition: "background-color 0.15s"
-  },
-  footer: {
-    marginTop: "32px",
-    borderTop: "1px solid #334155",
-    paddingTop: "20px",
-    textAlign: "center",
-    fontSize: "12px",
-    color: "#64748b"
-  }
-};

@@ -1,5 +1,4 @@
 import mysql from "mysql2/promise";
-import { MongoClient } from "mongodb";
 
 const getDbConfig = () => ({
   host: process.env.DB_HOST || "localhost",
@@ -8,7 +7,6 @@ const getDbConfig = () => ({
 });
 
 const getMetaDbName = () => process.env.DB_NAME || "admin";
-const getMongoUri = () => process.env.MONGO_URI || "mongodb://localhost:27017";
 
 // TABLE SCHEMAS for default creation tables (Quick Tables option)
 const TABLE_SCHEMAS = {
@@ -17,7 +15,7 @@ const TABLE_SCHEMAS = {
       \`id\` int(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
       \`fname\` varchar(50) DEFAULT NULL,
       \`lname\` varchar(50) DEFAULT NULL,
-      \`email\` varchar(100) DEFAULT NULL,
+      \`username\` varchar(100) DEFAULT NULL,
       \`password\` varchar(50) DEFAULT NULL,
       \`role\` bit(1) NOT NULL DEFAULT b'0' COMMENT '{"0":"Admin","1":"User"}',
       \`secureKey\` varchar(100) DEFAULT NULL,
@@ -26,8 +24,8 @@ const TABLE_SCHEMAS = {
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ALTER TABLE \`admin\` ADD UNIQUE KEY \`email\` (\`email\`);
-    INSERT INTO \`admin\` (\`fname\`, \`lname\`, \`email\`, \`password\`, \`role\`, \`secureKey\`) VALUES ('John', 'Doe', 'john@gmail.com', NULL, b'1', NULL);
+    ALTER TABLE \`admin\` ADD UNIQUE KEY \`username\` (\`username\`);
+    INSERT INTO \`admin\` (\`fname\`, \`lname\`, \`username\`, \`password\`, \`role\`, \`secureKey\`) VALUES ('Admin', 'User', 'admin', 'admin123', b'1', NULL);
   `,
   blog: `
     CREATE TABLE IF NOT EXISTS \`blog\` (
@@ -448,74 +446,36 @@ export const listDatabases = async (req, res) => {
 
     for (const dbName of dbNames) {
       if (dbName.startsWith("mongodb:")) {
-        const mongoDbRealName = dbName.replace("mongodb:", "");
-        try {
-          const client = new MongoClient(getMongoUri());
-          await client.connect();
-
-          const adminDb = client.db().admin();
-          const dbsInfo = await adminDb.listDatabases();
-          const dbExists = dbsInfo.databases.some(d => d.name === mongoDbRealName);
-
-          if (!dbExists) {
-            await client.close();
-            // Stale MongoDB database cleanup
-            await removeStaleDatabase(dbName);
-            continue;
-          }
-
-          const db = client.db(mongoDbRealName);
-          const collections = await db.listCollections().toArray();
-          await client.close();
-
-          databasesList.push({
-            id: "mongo_" + dbName,
-            name: dbName,
-            displayName: mongoDbRealName,
-            type: "mongodb",
-            createdDate: "Mongo DB",
-            tablesCount: collections.length,
-            owner: dbToOwnerMap[dbName] || "unknown",
-          });
-        } catch (err) {
-          databasesList.push({
-            id: "mongo_" + dbName,
-            name: dbName,
-            displayName: mongoDbRealName,
-            type: "mongodb",
-            createdDate: "Mongo DB",
-            tablesCount: 0,
-            owner: dbToOwnerMap[dbName] || "unknown",
-          });
-        }
-      } else {
-        try {
-          const [tables] = await adminConnection.query(`SHOW TABLES FROM \`${dbName}\``);
+        // Clean up stale MongoDB tracking, if any exists in legacy records
+        await removeStaleDatabase(dbName);
+        continue;
+      }
+      try {
+        const [tables] = await adminConnection.query(`SHOW TABLES FROM \`${dbName}\``);
+        databasesList.push({
+          id: "sql_" + dbName,
+          name: dbName,
+          displayName: dbName,
+          type: "sql",
+          createdDate: "Local DB",
+          tablesCount: tables.length,
+          owner: dbToOwnerMap[dbName] || "unknown",
+        });
+      } catch (err) {
+        const notExists = err.code === "ER_BAD_DB_ERROR" || err.errno === 1049 || String(err).includes("database does not exist");
+        if (!notExists) {
           databasesList.push({
             id: "sql_" + dbName,
             name: dbName,
             displayName: dbName,
             type: "sql",
             createdDate: "Local DB",
-            tablesCount: tables.length,
+            tablesCount: 0,
             owner: dbToOwnerMap[dbName] || "unknown",
           });
-        } catch (err) {
-          const notExists = err.code === "ER_BAD_DB_ERROR" || err.errno === 1049 || String(err).includes("database does not exist");
-          if (!notExists) {
-            databasesList.push({
-              id: "sql_" + dbName,
-              name: dbName,
-              displayName: dbName,
-              type: "sql",
-              createdDate: "Local DB",
-              tablesCount: 0,
-              owner: dbToOwnerMap[dbName] || "unknown",
-            });
-          } else {
-            // Stale SQL database cleanup
-            await removeStaleDatabase(dbName);
-          }
+        } else {
+          // Stale SQL database cleanup
+          await removeStaleDatabase(dbName);
         }
       }
     }
@@ -543,6 +503,10 @@ export const createDatabase = async (req, res) => {
       return res.status(400).json({ success: false, error: "Database name is required." });
     }
 
+    if (dbType === "mongodb") {
+      return res.status(400).json({ success: false, error: "MongoDB database creation is disabled. SQL only." });
+    }
+
     const trimmedName = dbName.trim().toLowerCase();
     const validPattern = /^[a-z0-9_]+$/;
     if (!validPattern.test(trimmedName)) {
@@ -552,45 +516,76 @@ export const createDatabase = async (req, res) => {
       });
     }
 
-    const isMongo = dbType === "mongodb";
-    const finalDbTrackingName = isMongo ? `mongodb:${trimmedName}` : trimmedName;
+    const finalDbTrackingName = trimmedName;
 
-    if (isMongo) {
-      const client = new MongoClient(getMongoUri());
-      await client.connect();
-      const db = client.db(trimmedName);
-
-      if (Array.isArray(tables) && tables.length > 0) {
-        for (const colName of tables) {
-          const col = db.collection(colName);
-          await col.insertOne({
-            created_at: new Date(),
-            description: `Auto-generated MongoDB collection for ${colName}`,
-          });
+    // Check if there is a soft-deleted database with the same name in the Recycle Bin
+    let metaCheckConn;
+    try {
+      metaCheckConn = await mysql.createConnection({
+        ...getDbConfig(),
+        database: getMetaDbName(),
+      });
+      // Auto-create recycled_items if not exists
+      await metaCheckConn.execute(`
+        CREATE TABLE IF NOT EXISTS \`recycled_items\` (
+          \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+          \`item_type\` VARCHAR(50) NOT NULL,
+          \`item_name\` VARCHAR(100) NOT NULL,
+          \`original_owner\` VARCHAR(100) NOT NULL,
+          \`parent_context\` VARCHAR(100) DEFAULT '',
+          \`metadata\` LONGTEXT DEFAULT NULL,
+          \`deleted_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      
+      const [recycledRows] = await metaCheckConn.execute(
+        "SELECT id FROM recycled_items WHERE item_type = 'database' AND item_name = ? LIMIT 1",
+        [finalDbTrackingName]
+      );
+      
+      if (recycledRows.length > 0) {
+        const recycledId = recycledRows[0].id;
+        // 1. Physically drop the old database to allow clean recreation
+        let dropMySQLConn;
+        try {
+          dropMySQLConn = await mysql.createConnection(getDbConfig());
+          await dropMySQLConn.execute(`DROP DATABASE IF EXISTS \`${trimmedName}\``);
+        } catch (e) {
+          console.warn("Failed to drop stale MySQL database during recreation", e);
+        } finally {
+          if (dropMySQLConn) {
+            try { await dropMySQLConn.end(); } catch(e) {}
+          }
         }
-      } else {
-        await db.collection("init").insertOne({ initialized: true, timestamp: new Date() });
+        
+        // 2. Remove the row from recycled_items
+        await metaCheckConn.execute("DELETE FROM recycled_items WHERE id = ?", [recycledId]);
       }
-      await client.close();
-    } else {
-      connection = await mysql.createConnection(getDbConfig());
-      await connection.execute(`CREATE DATABASE \`${trimmedName}\``);
-      await connection.query(`USE \`${trimmedName}\``);
+    } catch (e) {
+      console.error("Failed to query/clean recycle bin during db creation", e);
+    } finally {
+      if (metaCheckConn) {
+        try { await metaCheckConn.end(); } catch(e) {}
+      }
+    }
 
-      if (Array.isArray(tables) && tables.length > 0) {
-        for (const colName of tables) {
-          const schemaQuery = TABLE_SCHEMAS[colName];
-          if (schemaQuery) {
-            const queries = schemaQuery.split(";").map(q => q.trim()).filter(q => q.length > 0);
-            for (const q of queries) {
-              await connection.query(q);
-            }
+    connection = await mysql.createConnection(getDbConfig());
+    await connection.execute(`CREATE DATABASE \`${trimmedName}\``);
+    await connection.query(`USE \`${trimmedName}\``);
+
+    if (Array.isArray(tables) && tables.length > 0) {
+      for (const colName of tables) {
+        const schemaQuery = TABLE_SCHEMAS[colName];
+        if (schemaQuery) {
+          const queries = schemaQuery.split(";").map(q => q.trim()).filter(q => q.length > 0);
+          for (const q of queries) {
+            await connection.query(q);
           }
         }
       }
-      await connection.end();
-      connection = null;
     }
+    await connection.end();
+    connection = null;
 
     // Assign DB ownership
     if (username) {
@@ -630,7 +625,7 @@ export const createDatabase = async (req, res) => {
 };
 
 export const deleteDatabase = async (req, res) => {
-  let connection, userConn;
+  let userConn;
   try {
     const { dbName, username } = req.body;
 
@@ -638,10 +633,36 @@ export const deleteDatabase = async (req, res) => {
       return res.status(400).json({ success: false, error: "Database name is required." });
     }
 
-    const isMongo = dbName.startsWith("mongodb:");
-    const mongoDbRealName = isMongo ? dbName.replace("mongodb:", "") : dbName;
-    const trimmedName = mongoDbRealName.trim().toLowerCase();
+    if (dbName.startsWith("mongodb:")) {
+      // Just drop the entry from user registry for legacy cleanups
+      if (username) {
+        userConn = await mysql.createConnection({
+          ...getDbConfig(),
+          database: getMetaDbName(),
+        });
+        const [rows] = await userConn.execute(
+          "SELECT created_databases FROM user_cred WHERE username = ? LIMIT 1",
+          [username]
+        );
+        if (rows.length > 0) {
+          const currentDbs = rows[0].created_databases || "";
+          const updatedDbs = currentDbs
+            .split(",")
+            .map(d => d.trim())
+            .filter(d => d && d !== dbName)
+            .join(",");
+          await userConn.execute(
+            "UPDATE user_cred SET created_databases = ? WHERE username = ?",
+            [updatedDbs || null, username]
+          );
+        }
+        await userConn.end();
+        userConn = null;
+      }
+      return res.json({ success: true });
+    }
 
+    const trimmedName = dbName.trim().toLowerCase();
     const validPattern = /^[a-z0-9_]+$/;
     if (!validPattern.test(trimmedName)) {
       return res.status(400).json({ success: false, error: "Invalid database name." });
@@ -670,7 +691,7 @@ export const deleteDatabase = async (req, res) => {
       // 1. Record database in recycled_items
       await userConn.execute(
         "INSERT INTO recycled_items (item_type, item_name, original_owner, metadata) VALUES (?, ?, ?, ?)",
-        ["database", dbName, username, JSON.stringify({ isMongo })]
+        ["database", dbName, username, JSON.stringify({ isMongo: false })]
       );
 
       // 2. Remove database from the user's active tracking list in user_cred
@@ -698,9 +719,6 @@ export const deleteDatabase = async (req, res) => {
 
     return res.json({ success: true });
   } catch (err) {
-    if (connection) {
-      try { await connection.end(); } catch (e) {}
-    }
     if (userConn) {
       try { await userConn.end(); } catch (e) {}
     }

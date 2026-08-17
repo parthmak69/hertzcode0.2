@@ -1,6 +1,9 @@
-"use strict";
 import "./globals.css";
 import { ToastProvider } from "./context/ToastContext";
+import { AuthProvider } from "./context/AuthContext";
+import { ProjectProvider } from "./context/ProjectContext";
+import { DatabaseProvider } from "./context/DatabaseContext";
+
 export const metadata = {
   title: "HertzSoft - Admin Panel & HCoder Dashboard",
   description: "Mumbai's leading IT solutions provider. Building powerful web, mobile & AI solutions since 2017."
@@ -31,7 +34,13 @@ export default function RootLayout({
       </head>
       <body>
         <ToastProvider>
-          {children}
+          <AuthProvider>
+            <ProjectProvider>
+              <DatabaseProvider>
+                {children}
+              </DatabaseProvider>
+            </ProjectProvider>
+          </AuthProvider>
         </ToastProvider>
       </body>
     </html>;

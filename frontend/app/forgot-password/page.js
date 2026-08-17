@@ -1,7 +1,8 @@
-"use strict";
 "use client";
-import { useState } from "react";
+"use strict";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { authService } from "../../services/authService";
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -12,6 +13,33 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [logoSrc, setLogoSrc] = useState("/logo.png");
+
+  useEffect(() => {
+    const img = new window.Image();
+    img.src = "/logo.png";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          if (r > 240 && g > 240 && b > 240) {
+            data[i + 3] = 0;
+          }
+        }
+        ctx.putImageData(imgData, 0, 0);
+        setLogoSrc(canvas.toDataURL());
+      }
+    };
+  }, []);
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -29,13 +57,8 @@ export default function ForgotPasswordPage() {
     }
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, newPassword })
-      });
-      const data = await res.json();
-      if (!res.ok) {
+      const data = await authService.forgotPassword(email, newPassword);
+      if (!data.success) {
         setError(data.error || "Something went wrong.");
         return;
       }
@@ -51,8 +74,8 @@ export default function ForgotPasswordPage() {
 
        
         <div style={styles.logoFloat}>
-          <img src="/logo.png" alt="Hertzcoder Logo" style={{ height: "68px", objectFit: "contain" }} />
-          <div style={styles.logoSub} />
+          <img src={logoSrc} alt="Hertzcoder Logo" style={{ height: "68px", objectFit: "contain" }} />
+          <div style={styles.logoSub}>Reset Panel</div>
         </div>
 
         {
@@ -62,7 +85,7 @@ export default function ForgotPasswordPage() {
 
           {!success ? <>
               <h2 style={styles.heading}>Reset your password</h2>
-              <p style={styles.subheading}>Enter your email and choose a new password.</p>
+              <p style={styles.subheading}>Enter your username and choose a new password.</p>
 
               {error && <div style={styles.errorBox}>
                   <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: 7 }} />{error}
@@ -74,19 +97,19 @@ export default function ForgotPasswordPage() {
     /* Email */
   }
                 <div style={styles.fieldGroup}>
-                  <label style={styles.label}>Email Address</label>
+                  <label style={styles.label}>Username</label>
                   <div style={styles.inputWrap}>
                     <span style={styles.inputIcon}>
-                      <i className="fa-solid fa-envelope" style={{ color: "#94a3b8", fontSize: 13 }} />
+                      <i className="fa-solid fa-user" style={{ color: "#94a3b8", fontSize: 13 }} />
                     </span>
                     <input
-    type="email"
-    placeholder="Enter your email"
-    value={email}
-    onChange={(e) => setEmail(e.target.value)}
-    style={styles.input}
-    autoComplete="email"
-  />
+                      type="text"
+                      placeholder="Enter your username"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      style={styles.input}
+                      autoComplete="username"
+                    />
                   </div>
                 </div>
 
