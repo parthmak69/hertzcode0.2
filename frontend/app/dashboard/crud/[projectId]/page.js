@@ -70,24 +70,45 @@ export default function CrudFilesListPage() {
             if (matchedTbl && matchedTbl.columns) {
               columns = matchedTbl.columns.map((c) => {
                 let mappedType = "text";
+                const lowerName = c.name.toLowerCase();
                 const lowerType = c.type.toLowerCase();
-                if (lowerType.includes("int") || lowerType.includes("decimal") || lowerType.includes("float")) {
+
+                const isPk = c.index === "PRIMARY" || c.index === "PRIMARY KEY" || c.isPrimaryKey || lowerName === "id";
+                const isFk = lowerName.endsWith("_id") && lowerName !== "id";
+
+                if (isPk) {
                   mappedType = "number";
-                } else if (lowerType.includes("date") || lowerType.includes("time")) {
+                } else if (isFk) {
+                  mappedType = "select";
+                } else if (lowerName.includes("price") || lowerName.includes("amount") || lowerName.includes("cost") || lowerName.includes("stock") || lowerName.includes("qty") || lowerType.includes("int") || lowerType.includes("decimal") || lowerType.includes("float")) {
+                  mappedType = "number";
+                } else if (lowerName.includes("date") || lowerType.includes("date") || lowerType.includes("time")) {
                   mappedType = "date";
-                } else if (lowerType.includes("text")) {
+                } else if (lowerName.includes("desc") || lowerName.includes("content") || lowerType.includes("text")) {
                   mappedType = "textarea";
-                } else if (lowerType.includes("bit") || lowerType.includes("boolean")) {
+                } else if (lowerName.includes("image") || lowerName.includes("photo") || lowerName.includes("avatar") || lowerName.includes("file")) {
+                  mappedType = "file";
+                } else if (lowerName.includes("is_") || lowerName.includes("has_") || lowerName.includes("active") || lowerType.includes("bit") || lowerType.includes("boolean") || lowerType.includes("tinyint")) {
                   mappedType = "checkbox";
                 }
+
+                const inferredLookupTable = isFk ? lowerName.replace(/_id$/, "s") : "";
+
                 return {
                   id: "col_" + Math.random().toString(36).substr(2, 9),
                   name: c.name,
                   type: mappedType,
-                  isRequired: false,
-                  isUnique: c.index === "UNIQUE",
-                  isListCol: true,
-                  isFormCol: true
+                  isRequired: isPk ? false : (lowerName === "name" || lowerName === "title" || lowerName === "price"),
+                  isUnique: c.index === "UNIQUE" || isPk,
+                  isListCol: !lowerName.includes("desc") && !lowerName.includes("content"),
+                  isFormCol: !isPk,
+                  index: isPk ? "PRIMARY KEY" : (c.index || ""),
+                  isPrimaryKey: isPk,
+                  isAutoIncrement: isPk,
+                  selectType: isFk ? "table" : "static",
+                  selectLookupTable: inferredLookupTable,
+                  selectLookupValue: "id",
+                  selectLookupLabel: "name"
                 };
               });
             }
@@ -96,6 +117,25 @@ export default function CrudFilesListPage() {
         console.error("Failed to import table columns", err);
       }
     }
+
+    // Smart Auto-Protection: Ensure an 'id' Primary Key column ALWAYS exists at index 0
+    const hasPkColumn = columns.some(c => c.name.toLowerCase() === "id" || c.isPrimaryKey || c.index === "PRIMARY KEY");
+    if (!hasPkColumn) {
+      const defaultIdCol = {
+        id: "col_id_" + Date.now(),
+        name: "id",
+        type: "number",
+        isRequired: false,
+        isUnique: true,
+        isListCol: true,
+        isFormCol: false,
+        index: "PRIMARY KEY",
+        isPrimaryKey: true,
+        isAutoIncrement: true
+      };
+      columns = [defaultIdCol, ...columns];
+    }
+
     const newFile = {
       id: "file_" + Date.now(),
       name: formattedFileName,
@@ -104,8 +144,9 @@ export default function CrudFilesListPage() {
       createdAt: (/* @__PURE__ */ new Date()).toLocaleDateString(),
       premiumType,
       columns: columns.length > 0 ? columns : [
-        { id: "col_1", name: "title", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
-        { id: "col_2", name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
+        { id: "col_1", name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+        { id: "col_2", name: "title", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_3", name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true }
       ],
       settings: {
         createUsingAi: false,
@@ -349,10 +390,7 @@ export default function CrudFilesListPage() {
                     <option value="default">Default Standard CRUD</option>
                     <option value="master-form">Master Form Inputs</option>
                     <option value="portfolio">Portfolio Cards</option>
-                    <option value="products">Products List</option>
                     <option value="categories">Categories Folder</option>
-                    <option value="orders">Orders / Receipts</option>
-                    <option value="settings">Settings Configs</option>
                     <option value="admins">Admins System</option>
                   </select>
                 </div>

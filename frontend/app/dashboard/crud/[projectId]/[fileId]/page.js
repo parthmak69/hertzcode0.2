@@ -410,9 +410,7 @@ ${file.columns.filter((c) => c.isListCol !== false).map((c) => `            <td 
             </div>
           </div>
 
-          {file.columns
-            .filter(col => !['id', 'created_at', 'updated_at', 'deleted_at', 'is_deleted', 'password'].includes(col.name.toLowerCase()))
-            .map((col, idx) => (
+          {file.columns.map((col, idx) => (
             <SchemaCard
               key={col.id}
               col={col}

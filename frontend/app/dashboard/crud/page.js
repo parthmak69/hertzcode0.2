@@ -211,7 +211,7 @@ export default function CrudProjectsListPage() {
     placeholder="MyEcommerceApp"
     required
     value={projectName}
-    onChange={(e) => setProjectName(e.target.value.toLowerCase().replace(/[\s-]+/g, "_"))}
+    onChange={(e) => setProjectName(e.target.value)}
     style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
   />
                 </div>

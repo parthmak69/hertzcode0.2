@@ -56,14 +56,18 @@ export default function AdvancedCrudBuilder() {
       console.error("Failed to fetch tables/columns for builder:", err);
     }
   };
-  const generateDefaultTableConfig = (tableName, cols) => {
+  const generateDefaultTableConfig = (tableName, colsInput) => {
     const list_view = [];
     const create_form = [];
     const edit_form = [];
     const detail_view = [];
+
+    const hasId = colsInput.some(c => c.Field && (c.Field.toLowerCase() === 'id' || c.Field.toLowerCase() === `${tableName}_id`));
+    const cols = hasId ? colsInput : [{ Field: 'id', Type: 'int' }, ...colsInput];
+
     cols.forEach((col, idx) => {
       const name = col.Field;
-      const type = col.Type.toLowerCase();
+      const type = (col.Type || "varchar").toLowerCase();
       const isNum = type.includes("int") || type.includes("decimal") || type.includes("float") || type.includes("double");
       const isDate = type.includes("date") || type.includes("time") || type.includes("timestamp");
       const isText = type.includes("text");
@@ -349,6 +353,25 @@ export default function AdvancedCrudBuilder() {
     }
     return null;
   };
+  const handleUpdateTablePremiumType = (tableName, newPremiumType) => {
+    if (!project || !tableName) return;
+    const filesList = project.files || [];
+    let updatedFiles;
+    if (filesList.some(f => f.name === tableName)) {
+      updatedFiles = filesList.map(f => f.name === tableName ? { ...f, premiumType: newPremiumType } : f);
+    } else {
+      updatedFiles = [...filesList, { id: "file_" + Date.now(), name: tableName, tableName, premiumType: newPremiumType }];
+    }
+    const updatedProject = { ...project, files: updatedFiles };
+    setProject(updatedProject);
+    const user = localStorage.getItem("currentUser") || "";
+    const role = localStorage.getItem("currentUserRole") || "user";
+    const projs = getProjectsForUser(user, role);
+    const updatedList = projs.map(p => p.id === projectId ? updatedProject : p);
+    saveProjectsForUser(updatedList, user, role);
+    showToast(`Updated Feature Template for ${tableName} to ${newPremiumType.toUpperCase()}`, "success");
+  };
+
   if (!project) {
     return <div style={{ padding: "24px", color: "var(--text-primary)" }}>Loading CRUD details...</div>;
   }
@@ -362,6 +385,21 @@ export default function AdvancedCrudBuilder() {
           <span style={{ fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.8px" }}>Advanced CRUD Builder Workspace</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", backgroundColor: "#0f172a", padding: "4px 10px", borderRadius: "6px", border: "1px solid #334155" }}>
+            <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "bold" }}>Feature Template:</span>
+            <select
+              value={project.files?.find(f => f.name === selectedTable)?.premiumType || "default"}
+              onChange={(e) => handleUpdateTablePremiumType(selectedTable, e.target.value)}
+              style={{ backgroundColor: "transparent", color: "#38bdf8", border: "none", fontSize: "12.5px", fontWeight: "bold", outline: "none", cursor: "pointer" }}
+            >
+              <option value="default" style={{ color: "black" }}>⚙️ Standard CRUD (Default)</option>
+              <option value="master-form" style={{ color: "black" }}>📝 Master Form Inputs</option>
+              <option value="portfolio" style={{ color: "black" }}>🖼️ Portfolio Cards</option>
+              <option value="categories" style={{ color: "black" }}>📁 Categories Folder</option>
+              <option value="settings" style={{ color: "black" }}>⚙️ Settings Panel</option>
+              <option value="admins" style={{ color: "black" }}>🛡️ Admins System</option>
+            </select>
+          </div>
           <span style={{ color: "#94a3b8", fontSize: "13px" }}>Database: <b>{project.databaseName}</b></span>
           <button
     onClick={handleExportJson}

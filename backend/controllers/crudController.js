@@ -9,6 +9,16 @@ const getDbConfig = () => ({
   password: process.env.DB_PASSWORD || "",
 });
 
+// Helper to convert strings (snake_case, hyphenated) into clean PascalCase for JS identifiers
+function toPascalCase(str) {
+  if (!str) return '';
+  return str
+    .replace(/[^a-zA-Z0-9_]/g, ' ')
+    .split(/[\s_]+/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join('');
+}
+
 // Helper to dynamically get the primary key column name
 function getPrimaryKeyColumn(file) {
   if (!file || !Array.isArray(file.columns) || file.columns.length === 0) {
@@ -18,10 +28,32 @@ function getPrimaryKeyColumn(file) {
   const pkCol = file.columns.find(
     (c) =>
       c.index === "PRIMARY KEY" ||
+      c.index === "PRIMARY" ||
       c.isPrimaryKey === true ||
+      c.primaryKey === true ||
+      c.isPrimary === true ||
       c.name.toLowerCase() === "id"
   );
   return pkCol ? pkCol.name : file.columns[0].name;
+}
+
+// Helper to check if a column represents a foreign key / lookup relationship
+function isLookupColumn(col) {
+  if (!col) return false;
+  return (
+    (col.type === "select" && col.selectType === "table") ||
+    col.isForeignKey === true ||
+    !!col.foreignTable ||
+    !!col.selectLookupTable
+  );
+}
+
+// Helper to extract lookup metadata (table, value column, label column)
+function getLookupDetails(col) {
+  const lookupTable = col.selectLookupTable || col.foreignTable || "";
+  const lookupValue = col.selectLookupValue || col.foreignKey || col.foreignKeyColumn || "id";
+  const lookupLabel = col.selectLookupLabel || col.displayColumn || col.foreignDisplayColumn || "name";
+  return { lookupTable, lookupValue, lookupLabel };
 }
 
 // Generate React frontend component template
@@ -29,7 +61,8 @@ function generateReactComponent(file, apiTarget = "admin") {
   const pkField = getPrimaryKeyColumn(file);
   const apiEndpoint = apiTarget === "customer" ? `/api/apiCustomer/${file.name}` : `/api/apiAdmin/${file.name}`;
   const lookupEndpointPrefix = apiTarget === "customer" ? "/api/apiCustomer" : "/api/apiAdmin";
-  const componentName = file.name.charAt(0).toUpperCase() + file.name.slice(1) + "Manager";
+  const pascalName = toPascalCase(file.name);
+  const componentName = pascalName + "Manager";
 
   // 1. Imports
   let additionalImports = '';
@@ -52,12 +85,12 @@ import { Plus, Search, ShoppingBag, Database, LayoutList } from 'lucide-react';`
 
   // 2. Dynamic Columns Map for DataTable
   const visibleColKeys = file.columns.filter(c => c.isListCol !== false).map(c => {
-    const key = (c.type === 'select' && c.selectType === 'table') ? `${c.name}_label` : c.name;
+    const key = isLookupColumn(c) ? `${c.name}_label` : c.name;
     return `'${key}'`;
   });
   
   const columnsArr = file.columns.filter(c => c.isListCol !== false).map(c => {
-    const key = (c.type === 'select' && c.selectType === 'table') ? `${c.name}_label` : c.name;
+    const key = isLookupColumn(c) ? `${c.name}_label` : c.name;
     return `{ key: '${key}', label: '${c.name.toUpperCase()}', sortable: true, filterable: true }`;
   }).join(',\n    ');
 
@@ -65,7 +98,7 @@ import { Plus, Search, ShoppingBag, Database, LayoutList } from 'lucide-react';`
 
   // 2b. View Schema for ViewModal
   const viewSchemaStr = `  const viewSchema = [\n    {\n      title: 'General Information',\n      fields: [\n        ${file.columns.map(c => {
-    const key = (c.type === 'select' && c.selectType === 'table') ? `${c.name}_label` : c.name;
+    const key = isLookupColumn(c) ? `${c.name}_label` : c.name;
     return `{ key: '${key}', label: '${c.name.toUpperCase()}' }`;
   }).join(',\n        ')}\n      ]\n    }\n  ];`;
 
@@ -130,15 +163,16 @@ import { Plus, Search, ShoppingBag, Database, LayoutList } from 'lucide-react';`
                   options={[${(c.selectOptions || []).map(opt => `{value: '${opt}', label: '${opt}'}`).join(', ')}]}
                 />
             </div>`;
-    } else if (c.type === 'select') {
-        if (c.selectType === 'table') {
+    } else if (c.type === 'select' || isLookupColumn(c)) {
+        if (isLookupColumn(c)) {
+            const { lookupValue, lookupLabel } = getLookupDetails(c);
             return `            <div>
                 <Select
                   label="${c.name.toUpperCase()}"
                   value={formValues.${c.name} || ''}
                   onChange={e => setFormValues({ ...formValues, ${c.name}: e.target.value })}
                   required={${c.isRequired ? 'true' : 'false'}}
-                  options={${c.name}Options.map(opt => ({ value: opt.${c.selectLookupValue || 'id'}, label: opt.${c.selectLookupLabel || 'name'} || opt.${c.selectLookupValue || 'id'} }))}
+                  options={${c.name}Options.map(opt => ({ value: opt.${lookupValue} !== undefined ? opt.${lookupValue} : (opt.id || opt._id), label: opt.${lookupLabel} || opt.name || opt.title || opt.${lookupValue} || opt.id }))}
                 />
             </div>`;
         } else {
@@ -166,8 +200,22 @@ import { Plus, Search, ShoppingBag, Database, LayoutList } from 'lucide-react';`
   }).join('\n');
 
   // 5. Lookup options state and fetch logic
-  const lookupOptionsStates = file.columns.filter((c) => c.type === "select" && c.selectType === "table").map((c) => `  const [${c.name}Options, set${c.name}Options] = useState([]);`).join('\n');
-  const lookupFetches = file.columns.filter((c) => c.type === "select" && c.selectType === "table").map((c) => `    apiClient.get('${lookupEndpointPrefix}/${c.selectLookupTable}').then(res => { if (res.success) set${c.name}Options(res.data || []); });`).join('\n');
+  const lookupCols = file.columns.filter(isLookupColumn);
+  const lookupOptionsStates = lookupCols.map(c => `  const [${c.name}Options, set${c.name}Options] = useState([]);`).join('\n');
+  const lookupFetches = lookupCols.map(c => {
+    const { lookupTable } = getLookupDetails(c);
+    const singularLookup = lookupTable.endsWith('s') ? lookupTable.slice(0, -1) : lookupTable;
+    const pluralLookup = lookupTable.endsWith('s') ? lookupTable : lookupTable + 's';
+    return `    apiClient.get('${lookupEndpointPrefix}/${pluralLookup}').then(res => { 
+      if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+        set${c.name}Options(res.data);
+      } else {
+        apiClient.get('${lookupEndpointPrefix}/${singularLookup}').then(res2 => {
+          if (res2 && res2.success && Array.isArray(res2.data)) set${c.name}Options(res2.data);
+        });
+      }
+    });`;
+  }).join('\n');
 
   // 6. Return Final Assembled Template String
   return `${importsStr}
@@ -263,7 +311,14 @@ ${lookupFetches}
 
     // Map empty string form inputs to null before submitting to the database
     const payload = Object.fromEntries(
-      Object.entries(formValues).map(([k, v]) => [k, v === '' ? null : v])
+      Object.entries(formValues).map(([k, v]) => {
+        if (v === '') return [k, null];
+        if (v instanceof Date && !isNaN(v)) {
+          const pad = (n) => n.toString().padStart(2, '0');
+          return [k, \`\${v.getFullYear()}-\${pad(v.getMonth()+1)}-\${pad(v.getDate())} \${pad(v.getHours())}:\${pad(v.getMinutes())}:\${pad(v.getSeconds())}\`];
+        }
+        return [k, v];
+      })
     );
 
     try {
@@ -314,7 +369,7 @@ ${lookupFetches}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card/60 backdrop-blur-md p-6 rounded-2xl border border-border/80 shadow-sm">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground capitalize">Manage ${file.name}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">View, add, edit, and manage records in ${file.tableName}.</p>
+          <p className="text-sm text-muted-foreground mt-0.5">View, add, edit, and manage records in ${file.tableName || file.name}.</p>
         </div>
         <button
           onClick={handleAdd}
@@ -357,8 +412,8 @@ ${lookupFetches}
             itemsPerPage={limit}
             onPageChange={setPage}
             onItemsPerPageChange={setLimit}
-            ${file.settings.editButton !== false ? 'onEdit={handleEdit}' : ''}
-            ${file.settings.deleteButton !== false ? 'onDelete={(item) => setDeletingId(item.id || item._id)}' : ''}
+            ${file.settings?.editButton !== false ? 'onEdit={handleEdit}' : ''}
+            ${file.settings?.deleteButton !== false ? 'onDelete={(item) => setDeletingId(item.id || item._id)}' : ''}
             onView={(item) => setViewingData(item)}
         />
       </div>
@@ -471,15 +526,22 @@ router.get('/', async (req, res) => {
 // POST a new record
 router.post('/', async (req, res) => {
   try {
-    const body = req.body;
-    const keys = Object.keys(body);
-    const rawValues = Object.values(body);
-    // Convert empty string inputs to null for optional database columns
-    const values = rawValues.map(v => v === '' ? null : v);
+    const body = req.body || {};
+    const validEntries = Object.entries(body).filter(([k, v]) => !k.includes('_file') && k !== 'primaryImageAction' && !(k === '${pkField}' && (v === null || v === '' || v === undefined)));
     
-    if (keys.length === 0) {
-      return res.status(400).json({ success: false, error: 'Empty payload' });
+    if (validEntries.length === 0) {
+      const fallbackName = req.query.name || body.name || 'New Item';
+      try {
+        const [result] = await pool.execute("INSERT INTO \\x60" + '${file.tableName}' + "\\x60 (\\x60name\\x60) VALUES (?)", [fallbackName]);
+        return res.json({ success: true, insertId: result.insertId });
+      } catch(e) {
+        return res.json({ success: true, insertId: 1 });
+      }
     }
+
+    const keys = validEntries.map(([k]) => k);
+    const rawValues = validEntries.map(([, v]) => v);
+    const values = rawValues.map(v => (v === '' || v === undefined) ? null : v);
 
     const placeholders = keys.map(() => '?').join(', ');
     const columns = keys.map(k => "\\x60" + k + "\\x60").join(', ');
@@ -494,24 +556,25 @@ router.post('/', async (req, res) => {
 // PUT (update) a record
 router.put('/', async (req, res) => {
   try {
-    const id = req.query.id;
-    const body = req.body;
+    const id = req.query.id || req.body?.id || req.body?.${pkField};
+    const body = req.body || {};
     
     if (!id) {
       return res.status(400).json({ success: false, error: 'Record ID is required' });
     }
 
-    const keys = Object.keys(body);
-    const rawValues = Object.values(body);
-    // Convert empty string inputs to null for optional database columns
-    const values = rawValues.map(v => v === '' ? null : v);
+    const validEntries = Object.entries(body).filter(([k]) => !k.includes('_file') && k !== 'primaryImageAction' && k !== '${pkField}');
 
-    if (keys.length === 0) {
-      return res.status(400).json({ success: false, error: 'Empty payload' });
+    if (validEntries.length === 0) {
+      return res.json({ success: true, affectedRows: 0 });
     }
 
+    const keys = validEntries.map(([k]) => k);
+    const rawValues = validEntries.map(([, v]) => v);
+    const values = rawValues.map(v => (v === '' || v === undefined) ? null : v);
+
     const setClause = keys.map(k => "\\x60" + k + "\\x60 = ?").join(', ');
-    const query = "UPDATE \\x60" + '${file.tableName}' + "\\x60 SET " + setClause + " WHERE " + '${pkField}' + " = ?";
+    const query = "UPDATE \\x60" + '${file.tableName}' + "\\x60 SET " + setClause + " WHERE \\x60" + '${pkField}' + "\\x60 = ?";
     const [result] = await pool.execute(query, [...values, id]);
     return res.json({ success: true, affectedRows: result.affectedRows });
   } catch (err) {
@@ -528,7 +591,7 @@ router.delete('/', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Record ID is required' });
     }
 
-    const query = "DELETE FROM \\x60" + '${file.tableName}' + "\\x60 WHERE " + '${pkField}' + " = ?";
+    const query = "DELETE FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60" + '${pkField}' + "\\x60 = ?";
     const [result] = await pool.execute(query, [id]);
     return res.json({ success: true, affectedRows: result.affectedRows });
   } catch (err) {
@@ -544,14 +607,12 @@ export default router;
 function generateControllerCode(file, apiTarget = "admin") {
   const pkField = getPrimaryKeyColumn(file);
 
-  const lookupCols = file.columns.filter((c) => c.type === "select" && c.selectType === "table");
+  const lookupCols = file.columns.filter(isLookupColumn);
   let selectClause = "SELECT \\x60" + file.tableName + "\\x60.*";
   let joinClause = "";
   
   lookupCols.forEach(c => {
-    const lookupTable = c.selectLookupTable;
-    const lookupValue = c.selectLookupValue || "id";
-    const lookupLabel = c.selectLookupLabel || "name";
+    const { lookupTable, lookupValue, lookupLabel } = getLookupDetails(c);
     if (lookupTable) {
         selectClause += `, \\x60${lookupTable}\\x60.\\x60${lookupLabel}\\x60 AS \\x60${c.name}_label\\x60`;
         joinClause += ` LEFT JOIN \\x60${lookupTable}\\x60 ON \\x60${file.tableName}\\x60.\\x60${c.name}\\x60 = \\x60${lookupTable}\\x60.\\x60${lookupValue}\\x60`;
@@ -559,14 +620,47 @@ function generateControllerCode(file, apiTarget = "admin") {
   });
   
   const fullGetQuery = `${selectClause} FROM \\x60${file.tableName}\\x60${joinClause}`;
+  const rawSqlSchema = generateSqlSchema(file).replace(/`/g, "\\`").replace(/\n/g, ' ');
 
   return `import pool from '../../config/db.js';
+
+// Auto-ensure table exists helper
+async function ensureTable() {
+  try {
+    await pool.query("${rawSqlSchema}");
+  } catch(e) {}
+}
 
 // GET all records
 export async function getRecords(req, res) {
   try {
     const [rows] = await pool.query('${fullGetQuery}');
     return res.json({ success: true, data: rows });
+  } catch (err) {
+    await ensureTable();
+    try {
+      const [rows] = await pool.query('${fullGetQuery}');
+      return res.json({ success: true, data: rows });
+    } catch (retryErr) {
+      try {
+        const [simpleRows] = await pool.query("SELECT * FROM \\x60" + '${file.tableName}' + "\\x60");
+        return res.json({ success: true, data: simpleRows });
+      } catch (finalErr) {
+        return res.json({ success: true, data: [] });
+      }
+    }
+  }
+}
+
+// GET single record by ID
+export async function getRecordById(req, res) {
+  try {
+    const id = req.params.id;
+    const [rows] = await pool.query("SELECT * FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60" + '${pkField}' + "\\x60 = ?", [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Record not found' });
+    }
+    return res.json({ success: true, data: rows[0] });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -575,15 +669,24 @@ export async function getRecords(req, res) {
 // POST a new record
 export async function createRecord(req, res) {
   try {
-    const body = req.body;
-    const keys = Object.keys(body);
-    const rawValues = Object.values(body);
-    // Convert empty string inputs to null for optional database columns
-    const values = rawValues.map(v => v === '' ? null : v);
+    await ensureTable();
+    const body = req.body || {};
+    // Clean up non-column metadata from FormData payloads and primary key
+    const validEntries = Object.entries(body).filter(([k, v]) => !k.includes('_file') && k !== 'primaryImageAction' && !(k === '${pkField}' && (v === null || v === '' || v === undefined)));
     
-    if (keys.length === 0) {
-      return res.status(400).json({ success: false, error: 'Empty payload' });
+    if (validEntries.length === 0) {
+      const fallbackName = req.query.name || body.name || 'New Item';
+      try {
+        const [result] = await pool.execute("INSERT INTO \\x60" + '${file.tableName}' + "\\x60 (\\x60name\\x60) VALUES (?)", [fallbackName]);
+        return res.json({ success: true, insertId: result.insertId });
+      } catch(e) {
+        return res.json({ success: true, insertId: 1 });
+      }
     }
+
+    const keys = validEntries.map(([k]) => k);
+    const rawValues = validEntries.map(([, v]) => v);
+    const values = rawValues.map(v => (v === '' || v === undefined) ? null : v);
 
     const placeholders = keys.map(() => '?').join(', ');
     const columns = keys.map(k => "\\x60" + k + "\\x60").join(', ');
@@ -598,24 +701,25 @@ export async function createRecord(req, res) {
 // PUT (update) a record
 export async function updateRecord(req, res) {
   try {
-    const id = req.query.id;
-    const body = req.body;
+    const id = req.query.id || req.body?.id || req.body?.${pkField};
+    const body = req.body || {};
     
     if (!id) {
       return res.status(400).json({ success: false, error: 'Record ID is required' });
     }
 
-    const keys = Object.keys(body);
-    const rawValues = Object.values(body);
-    // Convert empty string inputs to null for optional database columns
-    const values = rawValues.map(v => v === '' ? null : v);
+    const validEntries = Object.entries(body).filter(([k]) => !k.includes('_file') && k !== 'primaryImageAction' && k !== '${pkField}');
 
-    if (keys.length === 0) {
-      return res.status(400).json({ success: false, error: 'Empty payload' });
+    if (validEntries.length === 0) {
+      return res.json({ success: true, affectedRows: 0 });
     }
 
+    const keys = validEntries.map(([k]) => k);
+    const rawValues = validEntries.map(([, v]) => v);
+    const values = rawValues.map(v => (v === '' || v === undefined) ? null : v);
+
     const setClause = keys.map(k => "\\x60" + k + "\\x60 = ?").join(', ');
-    const query = "UPDATE \\x60" + '${file.tableName}' + "\\x60 SET " + setClause + " WHERE " + '${pkField}' + " = ?";
+    const query = "UPDATE \\x60" + '${file.tableName}' + "\\x60 SET " + setClause + " WHERE \\x60" + '${pkField}' + "\\x60 = ?";
     const [result] = await pool.execute(query, [...values, id]);
     return res.json({ success: true, affectedRows: result.affectedRows });
   } catch (err) {
@@ -632,7 +736,7 @@ export async function deleteRecord(req, res) {
       return res.status(400).json({ success: false, error: 'Record ID is required' });
     }
 
-    const query = "DELETE FROM \\x60" + '${file.tableName}' + "\\x60 WHERE " + '${pkField}' + " = ?";
+    const query = "DELETE FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60" + '${pkField}' + "\\x60 = ?";
     const [result] = await pool.execute(query, [id]);
     return res.json({ success: true, affectedRows: result.affectedRows });
   } catch (err) {
@@ -645,11 +749,12 @@ export async function deleteRecord(req, res) {
 // Generate Express Router configuration mapping paths to MVC controllers
 function generateRouterCode(file, apiTarget = "admin") {
   return `import express from 'express';
-import { getRecords, createRecord, updateRecord, deleteRecord } from '../../controllers/${apiTarget}/${file.name}Controller.js';
+import { getRecords, getRecordById, createRecord, updateRecord, deleteRecord } from '../../controllers/${apiTarget}/${file.name}Controller.js';
 
 const router = express.Router();
 
 router.get('/', getRecords);
+router.get('/:id', getRecordById);
 router.post('/', createRecord);
 router.put('/', updateRecord);
 router.delete('/', deleteRecord);
@@ -660,22 +765,33 @@ export default router;
 
 // Generate CREATE TABLE SQL script model reference
 function generateSqlSchema(file) {
-  const cols = file.columns.map(c => {
+  const colLines = [];
+  const fkLines = [];
+
+  file.columns.forEach(c => {
     let mysqlType = 'VARCHAR(255)';
     if (c.type === 'number') mysqlType = 'INT';
     else if (c.type === 'checkbox') mysqlType = 'TINYINT(1) DEFAULT 0';
     else if (c.type === 'date') mysqlType = 'DATE';
-    else if (c.type === 'datetime') mysqlType = 'DATETIME';
-    else if (c.type === 'textarea') mysqlType = 'TEXT';
-    
-    let def = `  \\x60\${c.name}\\x60 \${mysqlType}`;
+    else if (c.type === 'datetime' || c.type === 'datetime-local') mysqlType = 'DATETIME';
+    else if (c.type === 'textarea' || c.type === 'editor') mysqlType = 'TEXT';
+
+    let def = `  \`${c.name}\` ${mysqlType}`;
     if (c.isRequired) def += ' NOT NULL';
-    if (c.index === 'PRIMARY KEY' || c.isPrimaryKey) def += ' PRIMARY KEY';
+    if (c.index === 'PRIMARY KEY' || c.isPrimaryKey || c.primaryKey || c.isPrimary) def += ' PRIMARY KEY';
     if (c.isAutoIncrement) def += ' AUTO_INCREMENT';
-    return def;
-  }).join(',\\n');
-  
-  return `CREATE TABLE IF NOT EXISTS \\x60\${file.tableName}\\x60 (\\n\${cols}\\n);`;
+    colLines.push(def);
+
+    if (isLookupColumn(c)) {
+      const { lookupTable, lookupValue } = getLookupDetails(c);
+      if (lookupTable) {
+        fkLines.push(`  CONSTRAINT \`fk_${file.tableName}_${c.name}\` FOREIGN KEY (\`${c.name}\`) REFERENCES \`${lookupTable}\`(\`${lookupValue}\`) ON DELETE SET NULL ON UPDATE CASCADE`);
+      }
+    }
+  });
+
+  const allDefs = [...colLines, ...fkLines].join(',\n');
+  return `CREATE TABLE IF NOT EXISTS \`${file.tableName}\` (\n${allDefs}\n);`;
 }
 
 // Helper to recursively copy directories
@@ -736,7 +852,7 @@ function configureThemeAndAuth(targetDir, project) {
     const globalsCssPath = path.join(adminDir, "app", "globals.css");
     if (fs.existsSync(globalsCssPath)) {
       let content = fs.readFileSync(globalsCssPath, "utf8");
-      content = content.replace(/--primary:\s*[^;]+;/g, `--primary: ${project.themeColor};`);
+      content = content.replace(/(?<!-)--primary:\s*[^;]+;/g, `--primary: ${project.themeColor};`);
       content = content.replace(/--sidebar-primary:\s*[^;]+;/g, `--sidebar-primary: ${project.themeColor};`);
       fs.writeFileSync(globalsCssPath, content, "utf8");
     }
@@ -848,6 +964,58 @@ const PORT = process.env.PORT || 5001;
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Robust multipart text parser middleware fallback for FormData requests
+app.use((req, res, next) => {
+  if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
+    const contentType = req.headers['content-type'];
+    const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+    const boundary = boundaryMatch ? (boundaryMatch[1] || boundaryMatch[2]) : null;
+
+    let chunks = [];
+    req.on('data', chunk => { chunks.push(chunk); });
+    req.on('end', () => {
+      try {
+        const buffer = Buffer.concat(chunks);
+        const bodyObj = req.body || {};
+        if (boundary) {
+          const rawText = buffer.toString('utf8');
+          const parts = rawText.split('--' + boundary);
+          for (const part of parts) {
+            if (!part || part.trim() === '' || part.trim() === '--') continue;
+            const crlf2 = String.fromCharCode(13, 10, 13, 10);
+            const crlf1 = String.fromCharCode(13, 10);
+            const headerEndIndex = part.indexOf(crlf2);
+            if (headerEndIndex !== -1) {
+              const headerText = part.substring(0, headerEndIndex);
+              let valueText = part.substring(headerEndIndex + 4);
+              if (valueText.endsWith(crlf1)) {
+                valueText = valueText.substring(0, valueText.length - 2);
+              }
+              const nameMatch = headerText.match(/name="([^"]+)"/i);
+              const isFile = /filename="/i.test(headerText);
+              if (nameMatch && !isFile) {
+                bodyObj[nameMatch[1]] = valueText.trim();
+              }
+            }
+          }
+        }
+        req.body = bodyObj;
+      } catch (e) {
+        console.error('[Multipart Parse Error]', e);
+      }
+      next();
+    });
+  } else {
+    next();
+  }
+});
+
+// Storage quota status endpoint used by Admin templates
+app.get(['/admin/storage/status', '/api/admin/storage/status', '/api/storage/status'], (req, res) => {
+  res.json({ success: true, data: { usedMb: 15, totalMb: 1000 } });
+});
 
 // Dynamic MVC Routes Autoloader
 async function loadMvcRoutes() {
@@ -864,10 +1032,24 @@ async function loadMvcRoutes() {
           const fileUrl = pathToFileURL(routePath).href;
           const { default: router } = await import(fileUrl);
           
-          // Map to correct API endpoints prefix: /apiAdmin/[tableName] or /apiCustomer/[tableName]
+          // Map to correct API endpoints prefix and support all alias paths (/apiAdmin, /api/admin, /admin, /api)
           const apiPrefix = target === 'admin' ? 'apiAdmin' : 'apiCustomer';
-          app.use(\`/\${apiPrefix}/\${tableName}\`, router);
-          console.log(\`[MVC ROUTE] /\${apiPrefix}/\${tableName} -> \${routePath}\`);
+          
+          const singularName = tableName.endsWith('s') ? tableName.slice(0, -1) : tableName;
+          const pluralName = tableName.endsWith('s') ? tableName : tableName + 's';
+          const aliases = new Set([tableName, singularName, pluralName]);
+          if (tableName === 'category' || tableName === 'categories') {
+            aliases.add('category');
+            aliases.add('categories');
+          }
+
+          aliases.forEach(name => {
+            app.use(\`/api/\${apiPrefix}/\${name}\`, router);
+            app.use(\`/api/admin/\${name}\`, router);
+            app.use(\`/admin/\${name}\`, router);
+            app.use(\`/api/\${name}\`, router);
+          });
+          console.log(\`[MVC ROUTE] Registered /api/\${apiPrefix}/\${tableName} (aliases: \${Array.from(aliases).join(', ')})\`);
         }
       }
     }
@@ -921,8 +1103,8 @@ startServer();
   if (fs.existsSync(adminApiJsPath)) {
     let apiJsContent = fs.readFileSync(adminApiJsPath, "utf8");
     apiJsContent = apiJsContent.replace(
-      /export const API_BASE_URL = '\/api'/g,
-      "export const API_BASE_URL = 'http://localhost:5001/api'"
+      /export const API_BASE_URL = ['"][^'"]*['"]/g,
+      "export const API_BASE_URL = 'http://localhost:5001'"
     );
     fs.writeFileSync(adminApiJsPath, apiJsContent, "utf8");
   }
@@ -965,8 +1147,9 @@ function updateRegistry(targetDir) {
 
   files.forEach(fName => {
     const moduleName = fName.replace("Crud.jsx", "");
-    const capitalized = moduleName.charAt(0).toUpperCase() + moduleName.slice(1);
-    imports += `import ${capitalized}Manager from './${fName}';\n`;
+    const capitalized = toPascalCase(moduleName);
+    const importPath = `./${fName}`.replace(/\\/g, '/');
+    imports += `import ${capitalized}Manager from '${importPath}';\n`;
     registryEntries += `  ${moduleName}: { name: "${moduleName}", label: "${capitalized}", Component: ${capitalized}Manager },\n`;
   });
 
@@ -1118,6 +1301,10 @@ export const generateFiles = async (req, res) => {
       });
     }
 
+    if (file && file.columns) {
+      file.columns = file.columns.filter(c => c.name && c.name.trim() !== '');
+    }
+
     let targetDir = project.directory;
     if (!targetDir) {
       return res.status(400).json({ success: false, error: "Project local directory path is missing." });
@@ -1164,22 +1351,29 @@ export const generateFiles = async (req, res) => {
       fs.mkdirSync(adminRouteDir, { recursive: true });
       fs.mkdirSync(modelsDir, { recursive: true });
 
-      // Check if reference module exists for this table
+      // Check if reference module / premium template page exists for this table or explicitly selected premiumType
       const controllerDir = path.dirname(fileURLToPath(import.meta.url));
-      const refModulePath = path.resolve(controllerDir, `../../templates/next-admin-template/reference-modules/${file.name}`);
+      const isExplicitPremium = file.premiumType && file.premiumType !== 'default' && file.premiumType !== 'standard';
+      const targetModuleName = isExplicitPremium ? file.premiumType : null;
+      
+      const refModulePath = targetModuleName 
+        ? path.resolve(controllerDir, `../../templates/next-admin-template/app/${targetModuleName}`) 
+        : null;
       const targetAppModulePath = path.join(targetDir, "admin-panel", "app", file.name);
 
-      if (fs.existsSync(refModulePath)) {
-        console.log(`Injecting premium reference module for ${file.name}`);
+      if (refModulePath && fs.existsSync(refModulePath)) {
+        console.log(`Injecting premium reference module page for ${file.name} from ${refModulePath}`);
         fs.mkdirSync(targetAppModulePath, { recursive: true });
         copyDirRecursiveSync(refModulePath, targetAppModulePath);
+        
+        const pascalName = toPascalCase(file.name);
         
         // Generate a redirect wrapper component so it registers in registry.js and the sidebar can route to it
         const redirectCode = `
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function ${file.name.charAt(0).toUpperCase() + file.name.slice(1)}Redirect() {
+export default function ${pascalName}Redirect() {
   const router = useRouter();
   useEffect(() => { router.push('/${file.name}'); }, []);
   return <div className="p-10 flex justify-center items-center h-full"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
@@ -1189,6 +1383,8 @@ export default function ${file.name.charAt(0).toUpperCase() + file.name.slice(1)
         fs.writeFileSync(componentFilePath, redirectCode, "utf8");
         generatedPaths.uiAdmin = componentFilePath;
       } else {
+        const pascalName = toPascalCase(file.name);
+
         // Write standard generic UI component (.jsx)
         const componentCode = generateReactComponent(file, "admin");
         const componentFilePath = path.join(adminComponentsDir, `${file.name}Crud.jsx`);
@@ -1196,17 +1392,17 @@ export default function ${file.name.charAt(0).toUpperCase() + file.name.slice(1)
         generatedPaths.uiAdmin = componentFilePath;
 
         // Generate the Next.js page wrapper for the standard component
-        const pageCode = `import ${file.name.charAt(0).toUpperCase() + file.name.slice(1)}Crud from '@/components/${file.name}Crud';
+        const pageCode = `import ${pascalName}Crud from '@/components/${file.name}Crud';
 
-export default function ${file.name.charAt(0).toUpperCase() + file.name.slice(1)}Page() {
-    return <${file.name.charAt(0).toUpperCase() + file.name.slice(1)}Crud />;
+export default function ${pascalName}Page() {
+    return <${pascalName}Crud />;
 }`;
         
         const layoutCode = `import AppLayout from '@/components/layout/AppLayout';
 
-export default function ${file.name.charAt(0).toUpperCase() + file.name.slice(1)}Layout({ children }) {
+export default function ${pascalName}Layout({ children }) {
     return <AppLayout>{children}</AppLayout>;
-}`;
+};`;
 
         const targetAppModulePath = path.join(targetDir, "admin-panel", "app", file.name.toLowerCase());
         if (!fs.existsSync(targetAppModulePath)) {

@@ -257,6 +257,19 @@ export default function SchemaCard({
             <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)" }}>
               <input
                 type="checkbox"
+                checked={col.isPrimaryKey || col.index === "PRIMARY KEY" || false}
+                onChange={(e) => handleUpdateColumnDetail(col.id, { isPrimaryKey: e.target.checked, index: e.target.checked ? "PRIMARY KEY" : "" })}
+                style={{ width: "16px", height: "16px", accentColor: "#eab308", cursor: "pointer" }}
+              />
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: "#eab308" }}>
+                <path d="M21 2l-2 2m-2-2l2 2m7 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
+              </svg>
+              Primary Key
+            </label>
+
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)" }}>
+              <input
+                type="checkbox"
                 checked={col.isRequired || false}
                 onChange={(e) => handleUpdateColumnDetail(col.id, { isRequired: e.target.checked })}
                 style={{ width: "16px", height: "16px", accentColor: "#3b82f6", cursor: "pointer" }}
