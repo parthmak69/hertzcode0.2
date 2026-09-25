@@ -116,6 +116,53 @@ export default function CrudFilesListPage() {
       } catch (err) {
         console.error("Failed to import table columns", err);
       }
+    } else if (premiumType && premiumType !== "default") {
+      // Auto-generate schema columns based on mapped Premium Template
+      if (premiumType === "categories") {
+        columns = [
+          { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+          { id: "col_name_" + Date.now(), name: "name", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_desc_" + Date.now(), name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
+          { id: "col_parent_" + Date.now(), name: "parent_id", type: "number", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_photo_" + Date.now(), name: "image_url", type: "file", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_weight_" + Date.now(), name: "weight", type: "number", isRequired: false, isUnique: false, isListCol: false, isFormCol: false },
+          { id: "col_level_" + Date.now(), name: "level", type: "number", isRequired: false, isUnique: false, isListCol: false, isFormCol: false }
+        ];
+      } else if (premiumType === "portfolio") {
+        columns = [
+          { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+          { id: "col_title_" + Date.now(), name: "title", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_desc_" + Date.now(), name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
+          { id: "col_cat_" + Date.now(), name: "category", type: "text", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_link_" + Date.now(), name: "button_link", type: "text", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_img_" + Date.now(), name: "image_url", type: "file", isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
+        ];
+      } else if (premiumType === "admins") {
+        columns = [
+          { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+          { id: "col_fname_" + Date.now(), name: "full_name", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_email_" + Date.now(), name: "email", type: "text", isRequired: true, isUnique: true, isListCol: true, isFormCol: true },
+          { id: "col_phone_" + Date.now(), name: "phone", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_pass_" + Date.now(), name: "password", type: "text", isRequired: true, isUnique: false, isListCol: false, isFormCol: true }
+        ];
+      } else if (premiumType === "master-form") {
+        columns = [
+          { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+          { id: "col_title_" + Date.now(), name: "title", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_subtitle_" + Date.now(), name: "subtitle", type: "text", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_content_" + Date.now(), name: "content", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
+          { id: "col_status_" + Date.now(), name: "status", type: "select", isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
+        ];
+      }
+    }
+
+    // Default fallback columns if no columns specified
+    if (columns.length === 0) {
+      columns = [
+        { id: "col_1_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+        { id: "col_2_" + Date.now(), name: "title", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_3_" + Date.now(), name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true }
+      ];
     }
 
     // Smart Auto-Protection: Ensure an 'id' Primary Key column ALWAYS exists at index 0
@@ -143,11 +190,7 @@ export default function CrudFilesListPage() {
       dbConnectCode: `// Connect to ${project.databaseName}`,
       createdAt: (/* @__PURE__ */ new Date()).toLocaleDateString(),
       premiumType,
-      columns: columns.length > 0 ? columns : [
-        { id: "col_1", name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
-        { id: "col_2", name: "title", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
-        { id: "col_3", name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true }
-      ],
+      columns,
       settings: {
         createUsingAi: false,
         showCreated: true,

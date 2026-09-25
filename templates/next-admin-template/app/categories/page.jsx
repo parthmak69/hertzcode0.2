@@ -353,20 +353,62 @@ export default function CategoriesPage() {
         setIsModalOpen(true)
     }
 
+    const generateFakerCategory = () => {
+        const adjectives = ['Smart', 'Eco-Friendly', 'Urban', 'Pro', 'Ultra-Slim', 'Digital', 'NextGen', 'Prime', 'Elite', 'Global', 'Organic', 'Vintage', 'Modern', 'Luxury', 'Essential', 'Hyper', 'Wireless', 'Compact', 'Precision', 'Aesthetic'];
+        const categoriesList = ['Electronics', 'Wearables', 'Laptops', 'Footwear', 'Home Decor', 'Kitchenware', 'Skincare', 'Fitness Gear', 'Automotive', 'Stationery', 'Jewelry', 'Audio Systems', 'Gaming Accessories', 'Lighting', 'Bags & Luggage', 'Toys & Games', 'Furniture', 'Outdoor Equipment'];
+        const suffixes = ['Collection', 'Series', 'Hub', 'Essentials', 'Studio', 'Line', 'Catalog', 'Zone', 'Boutique', 'Express', 'Craft', 'Lab'];
+
+        const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+        const cat = categoriesList[Math.floor(Math.random() * categoriesList.length)];
+        const suf = suffixes[Math.floor(Math.random() * suffixes.length)];
+
+        const name = Math.random() > 0.4 ? `${adj} ${cat}` : `${adj} ${cat} ${suf}`;
+
+        const verbs = ['Discover', 'Explore', 'Browse', 'Unveil', 'Experience our curated'];
+        const qualities = ['premium quality', 'hand-crafted', 'next-generation', 'bestselling', 'eco-conscious', 'high-performance', 'top-rated'];
+        const verb = verbs[Math.floor(Math.random() * verbs.length)];
+        const quality = qualities[Math.floor(Math.random() * qualities.length)];
+
+        const description = `${verb} ${quality} ${cat.toLowerCase()} designed for modern living and everyday efficiency.`;
+
+        const sampleImages = [
+            'https://images.unsplash.com/photo-1498049860654-af1a5c566876?auto=format&fit=crop&w=600&q=80',
+            'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=600&q=80',
+            'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=600&q=80',
+            'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=600&q=80',
+            'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80',
+            'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=600&q=80',
+            'https://images.unsplash.com/photo-1566454825481-4e48f80aa4d7?auto=format&fit=crop&w=600&q=80',
+            'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&w=600&q=80',
+            'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80',
+            'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=600&q=80',
+            'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80'
+        ];
+        const image_url = sampleImages[Math.floor(Math.random() * sampleImages.length)];
+
+        return { name, description, image_url };
+    };
+
     const handleFillFakeData = async () => {
         try {
-            const res = await apiClient.get('/testing/fake-data?type=category')
-            if (res.success && res.data) {
-                setCategoryName(res.data.name || '')
-                setCategoryDescription(res.data.description || '')
-                setImagePreview(res.data.image_url || '')
-                setImageAction(res.data.image_url ? 'upload' : 'none')
-                setFormError('')
+            const res = await apiClient.get('/testing/fake-data?type=category').catch(() => null);
+            if (res && res.success && res.data) {
+                setCategoryName(res.data.name || '');
+                setCategoryDescription(res.data.description || '');
+                setImagePreview(res.data.image_url || '');
+                setImageAction(res.data.image_url ? 'upload' : 'none');
+                setFormError('');
+                return;
             }
-        } catch (err) {
-            console.error('Failed to fill fake category data:', err)
-        }
-    }
+        } catch (err) {}
+
+        const fakeData = generateFakerCategory();
+        setCategoryName(fakeData.name);
+        setCategoryDescription(fakeData.description);
+        setImagePreview(fakeData.image_url);
+        setImageAction('upload');
+        setFormError('');
+    };
 
     const handleAddSubClick = (node) => {
         setEditingCategory(null)
@@ -861,35 +903,37 @@ export default function CategoriesPage() {
                         )}
                     </div>
 
-                    <div className="flex gap-3 pt-4 border-t border-border/60">
+                    <div className="flex flex-col sm:flex-row gap-2.5 pt-4 border-t border-border/60">
                         <button
                             type="button"
                             onClick={handleFillFakeData}
                             disabled={submitLoading}
-                            className="py-2.5 px-3 text-xs font-bold rounded-lg border border-indigo-500/20 bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 transition cursor-pointer active:scale-95 disabled:opacity-50"
+                            className="w-full sm:w-auto py-2.5 px-3.5 text-xs font-bold rounded-xl border border-indigo-500/20 bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 transition cursor-pointer active:scale-95 disabled:opacity-50 shadow-sm"
                         >
-                            Fill Fake Data
+                            ✨ Fill Fake Data
                         </button>
-                        <button
-                            type="button"
-                            disabled={submitLoading}
-                            onClick={() => setIsModalOpen(false)}
-                            className="flex-1 py-2.5 text-xs font-bold rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground transition cursor-pointer active:scale-95 disabled:opacity-50"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={submitLoading}
-                            className="flex-1 py-2.5 text-xs font-bold rounded-lg bg-primary text-primary-foreground hover:bg-primary/95 transition cursor-pointer active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5"
-                        >
-                            {submitLoading ? (
-                                <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                                <FolderPlus className="w-4 h-4" />
-                            )}
-                            {editingCategory ? 'Update Details' : 'Create Category'}
-                        </button>
+                        <div className="flex flex-1 gap-2.5">
+                            <button
+                                type="button"
+                                disabled={submitLoading}
+                                onClick={() => setIsModalOpen(false)}
+                                className="flex-1 py-2.5 text-xs font-bold rounded-xl border border-border bg-card text-muted-foreground hover:text-foreground transition cursor-pointer active:scale-95 disabled:opacity-50 shadow-sm"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={submitLoading}
+                                className="flex-1 py-2.5 text-xs font-bold rounded-xl bg-primary text-primary-foreground hover:bg-primary/95 transition cursor-pointer active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm"
+                            >
+                                {submitLoading ? (
+                                    <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <FolderPlus className="w-4 h-4" />
+                                )}
+                                {editingCategory ? 'Update' : 'Create Category'}
+                            </button>
+                        </div>
                     </div>
                 </form>
             </Modal>
@@ -902,10 +946,10 @@ export default function CategoriesPage() {
                 title="Delete Category?"
                 description={
                     deletingCategory
-                        ? `Are you sure you want to delete "${deletingCategory.name}"? WARNING: This action is cascade-recursive. Any child subcategories and sub-subcategories nested inside it will also be permanently deleted!`
+                        ? `Are you sure you want to delete "${deletingCategory.name}"? WARNING: Any child subcategories nested inside it will also be permanently deleted.`
                         : ''
                 }
-                confirmText="Yes, Cascade Delete"
+                confirmText="Delete Category"
                 confirmVariant="danger"
                 loading={deleteLoading}
             />

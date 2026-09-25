@@ -670,9 +670,22 @@ export async function getRecordById(req, res) {
 export async function createRecord(req, res) {
   try {
     await ensureTable();
-    const body = req.body || {};
-    // Clean up non-column metadata from FormData payloads and primary key
-    const validEntries = Object.entries(body).filter(([k, v]) => !k.includes('_file') && k !== 'primaryImageAction' && !(k === '${pkField}' && (v === null || v === '' || v === undefined)));
+    const body = { ...(req.body || {}) };
+    
+    // Normalize aliases for category parent ID, images, etc.
+    if (body.parentId !== undefined && body.parent_id === undefined) {
+      body.parent_id = body.parentId;
+    }
+    if (body.imageUrl !== undefined && body.image_url === undefined) {
+      body.image_url = body.imageUrl;
+    }
+
+    const validEntries = Object.entries(body).filter(([k, v]) => 
+      !k.includes('_file') && 
+      k !== 'primaryImageAction' && 
+      k !== 'parentId' &&
+      !(k === '${pkField}' && (v === null || v === '' || v === undefined))
+    );
     
     if (validEntries.length === 0) {
       const fallbackName = req.query.name || body.name || 'New Item';
@@ -686,13 +699,49 @@ export async function createRecord(req, res) {
 
     const keys = validEntries.map(([k]) => k);
     const rawValues = validEntries.map(([, v]) => v);
-    const values = rawValues.map(v => (v === '' || v === undefined) ? null : v);
+    const values = rawValues.map(v => (v === '' || v === undefined || v === 'null' || v === 'undefined') ? null : v);
 
     const placeholders = keys.map(() => '?').join(', ');
     const columns = keys.map(k => "\\x60" + k + "\\x60").join(', ');
     const query = "INSERT INTO \\x60" + '${file.tableName}' + "\\x60 (" + columns + ") VALUES (" + placeholders + ")";
-    const [result] = await pool.execute(query, values);
-    return res.json({ success: true, insertId: result.insertId });
+    
+    try {
+      const [result] = await pool.execute(query, values);
+      return res.json({ success: true, insertId: result.insertId });
+    } catch (err) {
+      // Auto-heal missing columns or missing default values if table already exists in MySQL
+      if (err.code === 'ER_BAD_FIELD_ERROR' || err.errno === 1054 || (err.message && err.message.includes('Unknown column'))) {
+        try {
+          const [cols] = await pool.query("SHOW COLUMNS FROM \\x60" + '${file.tableName}' + "\\x60");
+          const existingColNames = new Set(cols.map(c => c.Field));
+          
+          for (const key of keys) {
+            if (!existingColNames.has(key)) {
+              await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60" + key + "\\x60 TEXT NULL DEFAULT NULL");
+            }
+          }
+          const [retryResult] = await pool.execute(query, values);
+          return res.json({ success: true, insertId: retryResult.insertId });
+        } catch (alterErr) {
+          return res.status(500).json({ success: false, error: alterErr.message });
+        }
+      } else if (err.code === 'ER_NO_DEFAULT_FOR_FIELD' || err.errno === 1364 || (err.message && err.message.includes("doesn't have a default value"))) {
+        try {
+          const match = err.message.match(/Field '([^']+)'/);
+          const missingCol = match ? match[1] : null;
+          if (missingCol) {
+            await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + missingCol + "\\x60 INT NULL DEFAULT NULL");
+          } else {
+            await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60level\\x60 INT NULL DEFAULT NULL");
+          }
+          const [retryResult] = await pool.execute(query, values);
+          return res.json({ success: true, insertId: retryResult.insertId });
+        } catch (alterErr) {
+          return res.status(500).json({ success: false, error: alterErr.message });
+        }
+      }
+      throw err;
+    }
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -701,14 +750,26 @@ export async function createRecord(req, res) {
 // PUT (update) a record
 export async function updateRecord(req, res) {
   try {
-    const id = req.query.id || req.body?.id || req.body?.${pkField};
-    const body = req.body || {};
+    const id = req.params?.id || req.query.id || req.body?.id || req.body?.${pkField};
+    const body = { ...(req.body || {}) };
     
     if (!id) {
       return res.status(400).json({ success: false, error: 'Record ID is required' });
     }
 
-    const validEntries = Object.entries(body).filter(([k]) => !k.includes('_file') && k !== 'primaryImageAction' && k !== '${pkField}');
+    if (body.parentId !== undefined && body.parent_id === undefined) {
+      body.parent_id = body.parentId;
+    }
+    if (body.imageUrl !== undefined && body.image_url === undefined) {
+      body.image_url = body.imageUrl;
+    }
+
+    const validEntries = Object.entries(body).filter(([k]) => 
+      !k.includes('_file') && 
+      k !== 'primaryImageAction' && 
+      k !== 'parentId' &&
+      k !== '${pkField}'
+    );
 
     if (validEntries.length === 0) {
       return res.json({ success: true, affectedRows: 0 });
@@ -716,12 +777,45 @@ export async function updateRecord(req, res) {
 
     const keys = validEntries.map(([k]) => k);
     const rawValues = validEntries.map(([, v]) => v);
-    const values = rawValues.map(v => (v === '' || v === undefined) ? null : v);
+    const values = rawValues.map(v => (v === '' || v === undefined || v === 'null' || v === 'undefined') ? null : v);
 
     const setClause = keys.map(k => "\\x60" + k + "\\x60 = ?").join(', ');
     const query = "UPDATE \\x60" + '${file.tableName}' + "\\x60 SET " + setClause + " WHERE \\x60" + '${pkField}' + "\\x60 = ?";
-    const [result] = await pool.execute(query, [...values, id]);
-    return res.json({ success: true, affectedRows: result.affectedRows });
+    
+    try {
+      const [result] = await pool.execute(query, [...values, id]);
+      return res.json({ success: true, affectedRows: result.affectedRows });
+    } catch (err) {
+      if (err.code === 'ER_BAD_FIELD_ERROR' || err.errno === 1054 || (err.message && err.message.includes('Unknown column'))) {
+        try {
+          const [cols] = await pool.query("SHOW COLUMNS FROM \\x60" + '${file.tableName}' + "\\x60");
+          const existingColNames = new Set(cols.map(c => c.Field));
+          
+          for (const key of keys) {
+            if (!existingColNames.has(key)) {
+              await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60" + key + "\\x60 TEXT NULL DEFAULT NULL");
+            }
+          }
+          const [retryResult] = await pool.execute(query, [...values, id]);
+          return res.json({ success: true, affectedRows: retryResult.affectedRows });
+        } catch (alterErr) {
+          return res.status(500).json({ success: false, error: alterErr.message });
+        }
+      } else if (err.code === 'ER_NO_DEFAULT_FOR_FIELD' || err.errno === 1364 || (err.message && err.message.includes("doesn't have a default value"))) {
+        try {
+          const match = err.message.match(/Field '([^']+)'/);
+          const missingCol = match ? match[1] : null;
+          if (missingCol) {
+            await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + missingCol + "\\x60 INT NULL DEFAULT NULL");
+          }
+          const [retryResult] = await pool.execute(query, [...values, id]);
+          return res.json({ success: true, affectedRows: retryResult.affectedRows });
+        } catch (alterErr) {
+          return res.status(500).json({ success: false, error: alterErr.message });
+        }
+      }
+      throw err;
+    }
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -730,7 +824,7 @@ export async function updateRecord(req, res) {
 // DELETE a record
 export async function deleteRecord(req, res) {
   try {
-    const id = req.query.id;
+    const id = req.query.id || req.params?.id || req.body?.id;
     
     if (!id) {
       return res.status(400).json({ success: false, error: 'Record ID is required' });
@@ -757,7 +851,9 @@ router.get('/', getRecords);
 router.get('/:id', getRecordById);
 router.post('/', createRecord);
 router.put('/', updateRecord);
+router.put('/:id', updateRecord);
 router.delete('/', deleteRecord);
+router.delete('/:id', deleteRecord);
 
 export default router;
 `;
@@ -777,9 +873,14 @@ function generateSqlSchema(file) {
     else if (c.type === 'textarea' || c.type === 'editor') mysqlType = 'TEXT';
 
     let def = `  \`${c.name}\` ${mysqlType}`;
-    if (c.isRequired) def += ' NOT NULL';
-    if (c.index === 'PRIMARY KEY' || c.isPrimaryKey || c.primaryKey || c.isPrimary) def += ' PRIMARY KEY';
-    if (c.isAutoIncrement) def += ' AUTO_INCREMENT';
+    if (c.index === 'PRIMARY KEY' || c.isPrimaryKey || c.primaryKey || c.isPrimary) {
+      def += ' NOT NULL PRIMARY KEY';
+      if (c.isAutoIncrement) def += ' AUTO_INCREMENT';
+    } else if (c.isRequired) {
+      def += ' NOT NULL';
+    } else {
+      def += ' NULL DEFAULT NULL';
+    }
     colLines.push(def);
 
     if (isLookupColumn(c)) {
@@ -966,7 +1067,12 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Robust multipart text parser middleware fallback for FormData requests
+// Serve uploaded image and file assets
+app.use('/uploads', express.static(path.resolve('./public/uploads')));
+app.use('/public/uploads', express.static(path.resolve('./public/uploads')));
+app.use(express.static(path.resolve('./public')));
+
+// Robust binary multipart parser middleware for FormData & image uploads
 app.use((req, res, next) => {
   if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
     const contentType = req.headers['content-type'];
@@ -978,25 +1084,52 @@ app.use((req, res, next) => {
     req.on('end', () => {
       try {
         const buffer = Buffer.concat(chunks);
-        const bodyObj = req.body || {};
+        const bodyObj = { ...(req.body || {}) };
         if (boundary) {
-          const rawText = buffer.toString('utf8');
-          const parts = rawText.split('--' + boundary);
-          for (const part of parts) {
-            if (!part || part.trim() === '' || part.trim() === '--') continue;
-            const crlf2 = String.fromCharCode(13, 10, 13, 10);
-            const crlf1 = String.fromCharCode(13, 10);
-            const headerEndIndex = part.indexOf(crlf2);
+          const boundaryBuf = Buffer.from('--' + boundary);
+          let startPos = 0;
+          
+          while (startPos < buffer.length) {
+            const nextBoundaryPos = buffer.indexOf(boundaryBuf, startPos);
+            if (nextBoundaryPos === -1) break;
+            
+            const partBuf = buffer.slice(startPos, nextBoundaryPos);
+            startPos = nextBoundaryPos + boundaryBuf.length;
+            
+            const headerEndDelimiter = Buffer.from([13, 10, 13, 10]);
+            const headerEndIndex = partBuf.indexOf(headerEndDelimiter);
             if (headerEndIndex !== -1) {
-              const headerText = part.substring(0, headerEndIndex);
-              let valueText = part.substring(headerEndIndex + 4);
-              if (valueText.endsWith(crlf1)) {
-                valueText = valueText.substring(0, valueText.length - 2);
+              const headerText = partBuf.slice(0, headerEndIndex).toString('utf8');
+              let contentBuf = partBuf.slice(headerEndIndex + 4);
+              
+              if (contentBuf.length >= 2 && contentBuf[contentBuf.length - 2] === 13 && contentBuf[contentBuf.length - 1] === 10) {
+                contentBuf = contentBuf.slice(0, contentBuf.length - 2);
               }
+              
               const nameMatch = headerText.match(/name="([^"]+)"/i);
-              const isFile = /filename="/i.test(headerText);
-              if (nameMatch && !isFile) {
-                bodyObj[nameMatch[1]] = valueText.trim();
+              const filenameMatch = headerText.match(/filename="([^"]+)"/i);
+              
+              if (nameMatch) {
+                const fieldName = nameMatch[1];
+                if (filenameMatch && filenameMatch[1] && contentBuf.length > 0) {
+                  const rawFilename = path.basename(filenameMatch[1]);
+                  const uploadsDir = path.resolve('./public/uploads');
+                  if (!fs.existsSync(uploadsDir)) {
+                    fs.mkdirSync(uploadsDir, { recursive: true });
+                  }
+                  const safeName = \`\${Date.now()}_\${rawFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}\`;
+                  const savePath = path.join(uploadsDir, safeName);
+                  fs.writeFileSync(savePath, contentBuf);
+                  
+                  const fileUrl = \`/uploads/\${safeName}\`;
+                  bodyObj[fieldName] = fileUrl;
+                  if (fieldName === 'primary_image_file' || fieldName.includes('image') || fieldName.includes('photo') || fieldName.includes('avatar')) {
+                    bodyObj['image_url'] = fileUrl;
+                    bodyObj['photo'] = fileUrl;
+                  }
+                } else if (!filenameMatch) {
+                  bodyObj[fieldName] = contentBuf.toString('utf8').trim();
+                }
               }
             }
           }
@@ -1010,6 +1143,18 @@ app.use((req, res, next) => {
   } else {
     next();
   }
+});
+
+// Testing fake-data generator endpoint used by Admin templates
+app.get(['/testing/fake-data', '/api/testing/fake-data'], (req, res) => {
+  const type = req.query.type || 'category';
+  const fakeCategories = [
+    { name: 'Electronics & Smart Devices', description: 'Latest smartphones, laptops, smartwatches, and consumer electronics.', image_url: 'https://images.unsplash.com/photo-1498049860654-af1a5c566876?auto=format&fit=crop&w=600&q=80' },
+    { name: 'Modern Home & Kitchen', description: 'Furniture, decor, kitchen tools, and smart home appliances.', image_url: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=600&q=80' },
+    { name: 'Fashion & Urban Wear', description: 'Trending men and women clothing, footwear, and fashion accessories.', image_url: 'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=600&q=80' }
+  ];
+  const randomCat = fakeCategories[Math.floor(Math.random() * fakeCategories.length)];
+  res.json({ success: true, data: type === 'category' ? randomCat : randomCat });
 });
 
 // Storage quota status endpoint used by Admin templates

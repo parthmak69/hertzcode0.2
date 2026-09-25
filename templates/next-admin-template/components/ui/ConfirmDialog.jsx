@@ -69,11 +69,11 @@ export default function ConfirmDialog({
                 </p>
 
                 {/* Buttons */}
-                <div className="flex gap-3 pt-4">
+                <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-border/40 mt-4">
                     <button
                         onClick={onClose}
                         disabled={loading}
-                        className="flex-1 py-2.5 rounded-lg bg-muted text-foreground cursor-pointer hover:opacity-80 transition disabled:opacity-50"
+                        className="w-full sm:flex-1 py-2.5 px-4 rounded-xl border border-border/80 bg-secondary text-foreground text-xs sm:text-sm font-bold cursor-pointer hover:bg-secondary/80 transition active:scale-95 disabled:opacity-50 shadow-sm"
                     >
                         {cancelText}
                     </button>
@@ -81,13 +81,17 @@ export default function ConfirmDialog({
                     <button
                         onClick={onConfirm}
                         disabled={loading}
-                        className={`flex-1 py-2.5 rounded-lg font-medium transition cursor-pointer disabled:opacity-50
-              ${dialogType === "danger"
-                                ? "bg-destructive text-destructive-foreground hover:opacity-90"
-                                : "bg-primary text-primary-foreground hover:opacity-90"
-                            }`}
+                        className={`w-full sm:flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer active:scale-95 disabled:opacity-50 shadow-sm flex items-center justify-center gap-2 ${
+                            dialogType === "danger"
+                                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                : "bg-primary text-primary-foreground hover:bg-primary/90"
+                        }`}
                     >
-                        {loading ? "Processing..." : confirmText}
+                        {loading ? (
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mx-auto" />
+                        ) : (
+                            confirmText
+                        )}
                     </button>
                 </div>
 
