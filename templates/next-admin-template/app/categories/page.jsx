@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Modal from '@/components/ui/Modal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { apiClient } from '@/utils/api'
+import { toast } from '@/components/ui/Toast'
 import {
     Plus,
     Pencil,
@@ -16,13 +17,15 @@ import {
     X,
     FolderTree,
     Loader2,
-    Shuffle
+    Shuffle,
+    Search
 } from 'lucide-react'
 
 export default function CategoriesPage() {
     const [allCategories, setAllCategories] = useState([])
     const [loading, setLoading] = useState(false)
     const [expandedNodes, setExpandedNodes] = useState({})
+    const [searchQuery, setSearchQuery] = useState('')
 
     // Shuffling States
     const [isShuffled, setIsShuffled] = useState(false)
@@ -165,13 +168,49 @@ export default function CategoriesPage() {
         })
     }
 
-    // Shuffled version of Category Tree
+    // Filter tree recursively based on search query
+    const filterTree = (nodes, query) => {
+        const q = query.toLowerCase().trim()
+        if (!q) return nodes
+
+        return nodes.reduce((acc, node) => {
+            const matchesSelf = (node.name && node.name.toLowerCase().includes(q)) || 
+                                (node.description && node.description.toLowerCase().includes(q))
+            const filteredChildren = node.children ? filterTree(node.children, q) : []
+            const matchesChild = filteredChildren.length > 0
+
+            if (matchesSelf || matchesChild) {
+                acc.push({
+                    ...node,
+                    children: filteredChildren
+                })
+            }
+            return acc
+        }, [])
+    }
+
+    // Shuffled & Filtered version of Category Tree
     const displayCategoryTree = useMemo(() => {
+        let tree = categoryTree
         if (isShuffled) {
-            return sortTree(categoryTree, shuffledWeights)
+            tree = sortTree(tree, shuffledWeights)
         }
-        return categoryTree
-    }, [categoryTree, isShuffled, shuffledWeights])
+        if (searchQuery.trim()) {
+            tree = filterTree(tree, searchQuery)
+        }
+        return tree
+    }, [categoryTree, isShuffled, shuffledWeights, searchQuery])
+
+    // Auto expand all nodes when searching
+    useEffect(() => {
+        if (searchQuery.trim()) {
+            const newExpanded = {}
+            allCategories.forEach(cat => {
+                newExpanded[cat.id] = true
+            })
+            setExpandedNodes(newExpanded)
+        }
+    }, [searchQuery, allCategories])
 
     // Drag-and-Drop Handlers
     const handleDragStart = (e, node) => {
@@ -237,13 +276,14 @@ export default function CategoriesPage() {
                 if (parentId !== 'null' && parentId !== null) {
                     setExpandedNodes(prev => ({ ...prev, [parentId]: true }))
                 }
+                toast.success('Category hierarchy reordered successfully!')
                 fetchAllCategories()
             } else {
-                alert(res.message || 'Failed to update category parent.')
+                toast.error(res.message || 'Failed to update category parent.')
             }
         } catch (err) {
             console.error('Drag and drop category update error:', err)
-            alert('Something went wrong while reordering.')
+            toast.error('Something went wrong while reordering.')
         } finally {
             setLoading(false)
         }
@@ -261,7 +301,7 @@ export default function CategoriesPage() {
 
         // 1. Loop validation
         if (isDescendant(draggedNode, targetNode.id)) {
-            alert('Cannot move a category inside its own subcategories.')
+            toast.warning('Cannot move a category inside its own subcategories.')
             return
         }
 
@@ -270,7 +310,7 @@ export default function CategoriesPage() {
         const subtreeHeight = getSubtreeHeight(draggedNode)
 
         if (targetDepth + subtreeHeight > 3) {
-            alert(`Cannot move category: Exceeds the maximum catalog depth of 3 levels. Drop target depth is Level ${targetDepth}, and the dragged category height is ${subtreeHeight} levels.`)
+            toast.error(`Cannot move category: Exceeds the maximum catalog depth of 3 levels. Target depth is Level ${targetDepth}, dragged height is ${subtreeHeight}.`)
             return
         }
 
@@ -293,7 +333,7 @@ export default function CategoriesPage() {
 
         // 1. Loop validation
         if (targetParentId !== 'null' && (String(targetParentId) === String(draggedNode.id) || isDescendant(draggedNode, targetParentId))) {
-            alert('Cannot move a category inside its own subcategories.')
+            toast.warning('Cannot move a category inside its own subcategories.')
             return
         }
 
@@ -302,7 +342,7 @@ export default function CategoriesPage() {
         const subtreeHeight = getSubtreeHeight(draggedNode)
 
         if (targetParentDepth + subtreeHeight > 3) {
-            alert(`Cannot move category: Exceeds the maximum catalog depth of 3 levels. Sibling target parent depth is Level ${targetParentDepth}, and the dragged category height is ${subtreeHeight} levels.`)
+            toast.error(`Cannot move category: Exceeds the maximum catalog depth of 3 levels. Sibling target parent depth is Level ${targetParentDepth}, dragged height is ${subtreeHeight}.`)
             return
         }
 
@@ -398,6 +438,7 @@ export default function CategoriesPage() {
                 setImagePreview(res.data.image_url || '');
                 setImageAction(res.data.image_url ? 'upload' : 'none');
                 setFormError('');
+                toast.info('Filled form with dynamic fake category data!');
                 return;
             }
         } catch (err) {}
@@ -408,6 +449,7 @@ export default function CategoriesPage() {
         setImagePreview(fakeData.image_url);
         setImageAction('upload');
         setFormError('');
+        toast.info('Filled form with dynamic fake category data!');
     };
 
     const handleAddSubClick = (node) => {
@@ -473,6 +515,7 @@ export default function CategoriesPage() {
         e.preventDefault()
         if (!categoryName.trim()) {
             setFormError('Category name is required')
+            toast.error('Category name is required')
             return
         }
 
@@ -507,12 +550,21 @@ export default function CategoriesPage() {
 
             if (res.success) {
                 setIsModalOpen(false)
+                if (editingCategory) {
+                    toast.success('Category updated successfully!')
+                } else if (activeParentCategory) {
+                    toast.success(`Sub-category created under "${activeParentCategory.name}"!`)
+                } else {
+                    toast.success('Category created successfully!')
+                }
                 fetchAllCategories()
             } else {
                 setFormError(res.message || 'Action failed')
+                toast.error(res.message || 'Action failed')
             }
         } catch (err) {
             setFormError(err.message || 'Something went wrong')
+            toast.error(err.message || 'Something went wrong')
         } finally {
             setSubmitLoading(false)
         }
@@ -524,13 +576,15 @@ export default function CategoriesPage() {
         try {
             const res = await apiClient.delete(`/admin/categories/${deletingCategory.id}`)
             if (res.success) {
+                toast.success(`Category "${deletingCategory.name}" deleted successfully!`)
                 setDeletingCategory(null)
                 fetchAllCategories()
             } else {
-                alert(res.message || 'Failed to delete category')
+                toast.error(res.message || 'Failed to delete category')
             }
         } catch (err) {
             console.error('Delete category error:', err)
+            toast.error('Error occurred while deleting category')
         } finally {
             setDeleteLoading(false)
         }
@@ -632,15 +686,15 @@ export default function CategoriesPage() {
                     </div>
 
                     {/* Action Buttons / Drop Targets */}
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                         {draggedNode && !isCurrentlyDragged ? (
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1 sm:gap-1.5">
                                 <div 
                                     onDragOver={handleDragOverNode}
                                     onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragOverNodeId(node.id) }}
                                     onDragLeave={(e) => { e.stopPropagation(); setDragOverNodeId(null) }}
                                     onDrop={(e) => handleDropAsSibling(e, node)}
-                                    className={`px-2 py-1.5 sm:px-3 sm:py-1.5 border-2 border-dashed text-[10px] font-bold rounded-lg transition select-none flex items-center gap-1 cursor-pointer ${
+                                    className={`px-2 py-1 sm:px-3 sm:py-1.5 border-2 border-dashed text-[10px] font-bold rounded-lg transition select-none flex items-center gap-1 cursor-pointer ${
                                         isDragOver 
                                             ? 'border-primary bg-primary/20 text-primary scale-105' 
                                             : 'border-primary/40 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10'
@@ -656,7 +710,7 @@ export default function CategoriesPage() {
                                         onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragOverNodeId(node.id + '-child') }}
                                         onDragLeave={(e) => { e.stopPropagation(); setDragOverNodeId(null) }}
                                         onDrop={(e) => handleDropAsChild(e, node)}
-                                        className={`px-2 py-1.5 sm:px-3 sm:py-1.5 border-2 border-dashed text-[10px] font-bold rounded-lg transition select-none flex items-center gap-1 cursor-pointer ${
+                                        className={`px-2 py-1 sm:px-3 sm:py-1.5 border-2 border-dashed text-[10px] font-bold rounded-lg transition select-none flex items-center gap-1 cursor-pointer ${
                                             dragOverNodeId === node.id + '-child'
                                                 ? 'border-indigo-500 bg-indigo-500/20 text-indigo-500 scale-105' 
                                                 : 'border-indigo-500/40 bg-indigo-500/5 text-indigo-500 hover:border-indigo-500 hover:bg-indigo-500/10'
@@ -674,7 +728,7 @@ export default function CategoriesPage() {
                                 {depth < 2 && (
                                     <button
                                         onClick={() => handleAddSubClick(node)}
-                                        className="px-2 py-1 text-primary hover:bg-primary/10 transition active:scale-95 rounded-lg border border-primary/20 cursor-pointer flex items-center gap-1 text-[11px] font-semibold"
+                                        className="px-2 py-1.5 text-primary hover:bg-primary/10 transition active:scale-95 rounded-lg border border-primary/20 cursor-pointer flex items-center gap-1 text-[11px] font-semibold"
                                         title="Add sub-category"
                                     >
                                         <Plus className="w-3.5 h-3.5" />
@@ -702,7 +756,7 @@ export default function CategoriesPage() {
 
                 {/* Recursive Children Rendering */}
                 {isExpanded && hasChildren && (
-                    <div className="border-l border-border/30 pl-2.5 ml-3.5 sm:pl-4 sm:ml-8">
+                    <div className="border-l border-border/30 pl-1.5 ml-1 sm:pl-4 sm:ml-6">
                         {node.children.map(child => renderNode(child, depth + 1))}
                     </div>
                 )}
@@ -711,16 +765,16 @@ export default function CategoriesPage() {
     }
 
     return (
-        <div className="min-h-full bg-background p-4 lg:p-6 space-y-6 animate-in fade-in duration-200">
+        <div className="min-h-full bg-background p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6 animate-in fade-in duration-200">
             
             {/* Header Section */}
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-border/60">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 sm:pb-4 border-b border-border/60">
                 <div className="space-y-1">
-                    <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
-                        <FolderTree className="w-6 h-6 text-primary" />
+                    <h1 className="text-lg sm:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
+                        <FolderTree className="w-5 h-5 sm:w-6 sm:h-6 text-primary shrink-0" />
                         Categories Catalog
                     </h1>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
                         Manage and re-parent category folders visually by dragging and dropping them into parent categories or out to Level 1.
                     </p>
                 </div>
@@ -733,66 +787,90 @@ export default function CategoriesPage() {
                     onDragEnter={() => setIsDraggingOverRoot(true)}
                     onDragLeave={() => setIsDraggingOverRoot(false)}
                     onDrop={handleDropRoot}
-                    className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] max-w-lg w-[90%] p-6 border-2 border-dashed rounded-2xl text-center text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-2xl backdrop-blur-md ${
+                    className={`fixed top-4 sm:top-6 left-1/2 -translate-x-1/2 z-[9999] max-w-lg w-[92%] sm:w-full p-4 sm:p-6 border-2 border-dashed rounded-2xl text-center text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-2xl backdrop-blur-md ${
                         isDraggingOverRoot
                             ? 'border-primary bg-primary/20 text-primary scale-105 shadow-primary/10'
-                            : 'border-primary bg-card/90 text-primary'
+                            : 'border-primary bg-card/95 text-primary'
                     }`}
                 >
-                    <FolderPlus className="w-4 h-4 animate-bounce" />
-                    Drop here to move "{draggedNode.name}" out to Top-level (Level 1)
+                    <FolderPlus className="w-4 h-4 animate-bounce shrink-0" />
+                    <span className="truncate">Drop here to move "{draggedNode.name}" out to Top-level (Level 1)</span>
                 </div>
             )}
 
-            {/* Tree Navigation Toolbar */}
-            <div className="bg-card border border-border/85 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
-                <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
-                    <button
-                        onClick={expandAll}
-                        className="flex-1 sm:flex-initial text-center justify-center px-3.5 py-2 bg-secondary text-foreground hover:bg-secondary/80 font-bold text-xs rounded-xl transition active:scale-98 cursor-pointer border border-border/60 shadow-sm"
-                    >
-                        Expand All
-                    </button>
-                    <button
-                        onClick={collapseAll}
-                        className="flex-1 sm:flex-initial text-center justify-center px-3.5 py-2 bg-secondary text-foreground hover:bg-secondary/80 font-bold text-xs rounded-xl transition active:scale-98 cursor-pointer border border-border/60 shadow-sm"
-                    >
-                        Collapse All
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleShuffleToggle}
-                        className={`w-full sm:w-auto px-3.5 py-2 font-bold text-xs rounded-xl transition active:scale-98 cursor-pointer border flex items-center justify-center gap-1.5 shadow-sm ${
-                            isShuffled
-                                ? 'bg-primary/10 border-primary/30 text-primary font-bold shadow-sm'
-                                : 'bg-secondary text-foreground hover:bg-secondary/80 border-border/60'
-                        }`}
-                        title={isShuffled ? "Reset categories order" : "Shuffle categories randomly"}
-                    >
-                        <Shuffle className="w-3.5 h-3.5" />
-                        {isShuffled ? 'Reset Order' : 'Shuffle Categories'}
-                    </button>
+            {/* Tree Navigation & Filter Toolbar */}
+            <div className="bg-card border border-border/85 rounded-2xl p-3 sm:p-4 shadow-sm flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+                
+                {/* Search Bar */}
+                <div className="relative flex-1 max-w-md">
+                    <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                        type="text"
+                        placeholder="Filter categories by name or description..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm rounded-xl border border-border/80 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition shadow-inner"
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition rounded-full"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </button>
+                    )}
                 </div>
 
-                <button
-                    onClick={handleAddClick}
-                    className="w-full sm:w-auto py-2.5 px-4 bg-primary text-primary-foreground font-bold text-xs rounded-xl hover:bg-primary/95 transition active:scale-98 cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
-                >
-                    <Plus className="w-4 h-4" />
-                    Add Top-level Category
-                </button>
+                {/* Toolbar Buttons */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="grid grid-cols-3 sm:flex items-center gap-2">
+                        <button
+                            onClick={expandAll}
+                            className="text-center justify-center px-2.5 sm:px-3 py-2 bg-secondary text-foreground hover:bg-secondary/80 font-bold text-xs rounded-xl transition active:scale-95 cursor-pointer border border-border/60 shadow-sm"
+                        >
+                            Expand
+                        </button>
+                        <button
+                            onClick={collapseAll}
+                            className="text-center justify-center px-2.5 sm:px-3 py-2 bg-secondary text-foreground hover:bg-secondary/80 font-bold text-xs rounded-xl transition active:scale-95 cursor-pointer border border-border/60 shadow-sm"
+                        >
+                            Collapse
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleShuffleToggle}
+                            className={`px-2.5 sm:px-3 py-2 font-bold text-xs rounded-xl transition active:scale-95 cursor-pointer border flex items-center justify-center gap-1 shadow-sm ${
+                                isShuffled
+                                    ? 'bg-primary/10 border-primary/30 text-primary font-bold shadow-sm'
+                                    : 'bg-secondary text-foreground hover:bg-secondary/80 border-border/60'
+                            }`}
+                            title={isShuffled ? "Reset categories order" : "Shuffle categories randomly"}
+                        >
+                            <Shuffle className="w-3.5 h-3.5" />
+                            <span className="hidden xs:inline">{isShuffled ? 'Reset' : 'Shuffle'}</span>
+                        </button>
+                    </div>
+
+                    <button
+                        onClick={handleAddClick}
+                        className="py-2.5 px-4 bg-primary text-primary-foreground font-bold text-xs rounded-xl hover:bg-primary/95 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+                    >
+                        <Plus className="w-4 h-4" />
+                        <span>Add Top-level Category</span>
+                    </button>
+                </div>
             </div>
 
             {/* Collapsible Tree Container */}
             <div className="bg-card border border-border/80 rounded-2xl overflow-hidden shadow-sm">
                 
                 {/* Header Tag */}
-                <div className="px-5 py-4 border-b border-border/60 bg-muted/20 flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                        <Folder className="w-3.5 h-3.5 text-primary" />
+                <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-border/60 bg-muted/20 flex items-center justify-between gap-2">
+                    <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 truncate">
+                        <Folder className="w-3.5 h-3.5 text-primary shrink-0" />
                         Categories Catalog Hierarchy Tree
                     </span>
-                    <span className="px-2.5 py-0.5 rounded-full text-[9px] font-bold tracking-wide uppercase bg-primary/10 text-primary border border-primary/20">
+                    <span className="shrink-0 px-2 sm:px-2.5 py-0.5 rounded-full text-[9px] font-bold tracking-wide uppercase bg-primary/10 text-primary border border-primary/20">
                         Interactive View
                     </span>
                 </div>

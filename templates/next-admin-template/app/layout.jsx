@@ -1,7 +1,7 @@
 import './globals.css'
 import { ThemeProvider } from '@/context/ThemeContext'
 import AuthGuard from '@/components/layout/AuthGuard'
-import SocketListener from '@/components/layout/SocketListener'
+import ToastContainer from '@/components/ui/Toast'
 import { Poppins } from 'next/font/google'
 
 const poppins = Poppins({
@@ -54,8 +54,8 @@ export default function RootLayout({ children }) {
       <body>
         <ThemeProvider>
           <AuthGuard>
-            <SocketListener />
             {children}
+            <ToastContainer />
           </AuthGuard>
         </ThemeProvider>
       </body>

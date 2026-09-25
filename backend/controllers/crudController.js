@@ -81,6 +81,7 @@ import ViewModal from '@/components/ui/ViewModal';
 import DataTable from '@/components/ui/DataTable';
 import { Input, Select, Textarea, Checkbox, Toggle, RadioGroup, RangeSlider } from '@/components/ui/FormFields';${additionalImports}
 import { apiClient } from '@/utils/api';
+import { toast } from '@/components/ui/Toast';
 import { Plus, Search, ShoppingBag, Database, LayoutList } from 'lucide-react';`;
 
   // 2. Dynamic Columns Map for DataTable
@@ -246,11 +247,12 @@ export default function ${componentName}() {
   // View State
   const [viewingData, setViewingData] = useState(null);
 
-  // Toast Notification State
-  const [toast, setToast] = useState({ message: '', type: '' });
+  // Toast Notification State (React-Toastify)
   const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast({ message: '', type: '' }), 3000);
+    if (type === 'error') toast.error(message);
+    else if (type === 'info') toast.info(message);
+    else if (type === 'warning') toast.warning(message);
+    else toast.success(message);
   };
 
 ${lookupOptionsStates}
