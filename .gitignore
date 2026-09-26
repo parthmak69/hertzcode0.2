@@ -42,4 +42,9 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+# Temporary & Zip Files
+scratch/
+*.zip
+
 context.md
+

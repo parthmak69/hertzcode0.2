@@ -681,6 +681,12 @@ export async function createRecord(req, res) {
     if (body.imageUrl !== undefined && body.image_url === undefined) {
       body.image_url = body.imageUrl;
     }
+    if (body.primary_image_url !== undefined) {
+      body.image_url = body.primary_image_url;
+    }
+    if (body.primaryImageAction === 'remove') {
+      body.image_url = '';
+    }
 
     const validEntries = Object.entries(body).filter(([k, v]) => 
       !k.includes('_file') && 
@@ -732,10 +738,16 @@ export async function createRecord(req, res) {
           const match = err.message.match(/Field '([^']+)'/);
           const missingCol = match ? match[1] : null;
           if (missingCol) {
-            await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + missingCol + "\\x60 INT NULL DEFAULT NULL");
-          } else {
-            await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60level\\x60 INT NULL DEFAULT NULL");
+            await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + missingCol + "\\x60 VARCHAR(255) NULL DEFAULT NULL");
           }
+          // Also alter any other NOT NULL columns without default values to NULL DEFAULT NULL
+          try {
+            const [cols] = await pool.query("SHOW COLUMNS FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60Null\\x60 = 'NO' AND \\x60Extra\\x60 NOT LIKE '%auto_increment%' AND \\x60Default\\x60 IS NULL AND \\x60Key\\x60 != 'PRI'");
+            for (const c of cols) {
+              await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + c.Field + "\\x60 TEXT NULL DEFAULT NULL");
+            }
+          } catch(e) {}
+
           const [retryResult] = await pool.execute(query, values);
           return res.json({ success: true, insertId: retryResult.insertId });
         } catch (alterErr) {
@@ -764,6 +776,12 @@ export async function updateRecord(req, res) {
     }
     if (body.imageUrl !== undefined && body.image_url === undefined) {
       body.image_url = body.imageUrl;
+    }
+    if (body.primary_image_url !== undefined) {
+      body.image_url = body.primary_image_url;
+    }
+    if (body.primaryImageAction === 'remove') {
+      body.image_url = '';
     }
 
     const validEntries = Object.entries(body).filter(([k]) => 

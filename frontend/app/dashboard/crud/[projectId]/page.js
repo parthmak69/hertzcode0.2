@@ -62,71 +62,15 @@ export default function CrudFilesListPage() {
     const formattedFileName = fileName.trim().toLowerCase().replace(/[\s-]+/g, "_");
     const formattedTableName = tableName.trim().toLowerCase().replace(/[\s-]+/g, "_") || selectedImportTable || formattedFileName;
     let columns = [];
-    if (selectedImportTable) {
-      try {
-        const data = await databaseService.getTables(project.databaseName);
-        if (data.success && data.tables) {
-          const matchedTbl = data.tables.find((t) => t.name === selectedImportTable);
-            if (matchedTbl && matchedTbl.columns) {
-              columns = matchedTbl.columns.map((c) => {
-                let mappedType = "text";
-                const lowerName = c.name.toLowerCase();
-                const lowerType = c.type.toLowerCase();
-
-                const isPk = c.index === "PRIMARY" || c.index === "PRIMARY KEY" || c.isPrimaryKey || lowerName === "id";
-                const isFk = lowerName.endsWith("_id") && lowerName !== "id";
-
-                if (isPk) {
-                  mappedType = "number";
-                } else if (isFk) {
-                  mappedType = "select";
-                } else if (lowerName.includes("price") || lowerName.includes("amount") || lowerName.includes("cost") || lowerName.includes("stock") || lowerName.includes("qty") || lowerType.includes("int") || lowerType.includes("decimal") || lowerType.includes("float")) {
-                  mappedType = "number";
-                } else if (lowerName.includes("date") || lowerType.includes("date") || lowerType.includes("time")) {
-                  mappedType = "date";
-                } else if (lowerName.includes("desc") || lowerName.includes("content") || lowerType.includes("text")) {
-                  mappedType = "textarea";
-                } else if (lowerName.includes("image") || lowerName.includes("photo") || lowerName.includes("avatar") || lowerName.includes("file")) {
-                  mappedType = "file";
-                } else if (lowerName.includes("is_") || lowerName.includes("has_") || lowerName.includes("active") || lowerType.includes("bit") || lowerType.includes("boolean") || lowerType.includes("tinyint")) {
-                  mappedType = "checkbox";
-                }
-
-                const inferredLookupTable = isFk ? lowerName.replace(/_id$/, "s") : "";
-
-                return {
-                  id: "col_" + Math.random().toString(36).substr(2, 9),
-                  name: c.name,
-                  type: mappedType,
-                  isRequired: isPk ? false : (lowerName === "name" || lowerName === "title" || lowerName === "price"),
-                  isUnique: c.index === "UNIQUE" || isPk,
-                  isListCol: !lowerName.includes("desc") && !lowerName.includes("content"),
-                  isFormCol: !isPk,
-                  index: isPk ? "PRIMARY KEY" : (c.index || ""),
-                  isPrimaryKey: isPk,
-                  isAutoIncrement: isPk,
-                  selectType: isFk ? "table" : "static",
-                  selectLookupTable: inferredLookupTable,
-                  selectLookupValue: "id",
-                  selectLookupLabel: "name"
-                };
-              });
-            }
-          }
-      } catch (err) {
-        console.error("Failed to import table columns", err);
-      }
-    } else if (premiumType && premiumType !== "default") {
+    if (premiumType && premiumType !== "default") {
       // Auto-generate schema columns based on mapped Premium Template
       if (premiumType === "categories") {
         columns = [
           { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
           { id: "col_name_" + Date.now(), name: "name", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
           { id: "col_desc_" + Date.now(), name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
-          { id: "col_parent_" + Date.now(), name: "parent_id", type: "number", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_photo_" + Date.now(), name: "image_url", type: "file", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_weight_" + Date.now(), name: "weight", type: "number", isRequired: false, isUnique: false, isListCol: false, isFormCol: false },
-          { id: "col_level_" + Date.now(), name: "level", type: "number", isRequired: false, isUnique: false, isListCol: false, isFormCol: false }
+          { id: "col_parent_" + Date.now(), name: "parent_id", type: "select", selectType: "table", selectLookupTable: "categories", selectLookupValue: "id", selectLookupLabel: "name", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_photo_" + Date.now(), name: "image_url", type: "file", isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
         ];
       } else if (premiumType === "portfolio") {
         columns = [
@@ -143,7 +87,7 @@ export default function CrudFilesListPage() {
           { id: "col_fname_" + Date.now(), name: "full_name", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
           { id: "col_email_" + Date.now(), name: "email", type: "text", isRequired: true, isUnique: true, isListCol: true, isFormCol: true },
           { id: "col_phone_" + Date.now(), name: "phone", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_pass_" + Date.now(), name: "password", type: "text", isRequired: true, isUnique: false, isListCol: false, isFormCol: true }
+          { id: "col_pass_" + Date.now(), name: "password", type: "password", isRequired: true, isUnique: false, isListCol: false, isFormCol: true }
         ];
       } else if (premiumType === "master-form") {
         columns = [
@@ -151,10 +95,65 @@ export default function CrudFilesListPage() {
           { id: "col_title_" + Date.now(), name: "title", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
           { id: "col_subtitle_" + Date.now(), name: "subtitle", type: "text", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
           { id: "col_content_" + Date.now(), name: "content", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
-          { id: "col_status_" + Date.now(), name: "status", type: "select", isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
+          { id: "col_status_" + Date.now(), name: "status", type: "select", selectType: "static", selectOptions: ["Active", "Inactive"], isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
         ];
       }
+    } else if (selectedImportTable) {
+      try {
+        const data = await databaseService.getTables(project.databaseName);
+        if (data.success && data.tables) {
+          const matchedTbl = data.tables.find((t) => t.name === selectedImportTable);
+          if (matchedTbl && matchedTbl.columns) {
+            columns = matchedTbl.columns.map((c) => {
+              let mappedType = "text";
+              const lowerName = c.name.toLowerCase();
+              const lowerType = c.type.toLowerCase();
+
+              const isPk = c.index === "PRIMARY" || c.index === "PRIMARY KEY" || c.isPrimaryKey || lowerName === "id";
+              const isFk = lowerName.endsWith("_id") && lowerName !== "id";
+
+              if (isPk) {
+                mappedType = "number";
+              } else if (isFk) {
+                mappedType = "select";
+              } else if (lowerName.includes("price") || lowerName.includes("amount") || lowerName.includes("cost") || lowerName.includes("stock") || lowerName.includes("qty") || lowerType.includes("int") || lowerType.includes("decimal") || lowerType.includes("float")) {
+                mappedType = "number";
+              } else if (lowerName.includes("date") || lowerType.includes("date") || lowerType.includes("time")) {
+                mappedType = "date";
+              } else if (lowerName.includes("desc") || lowerName.includes("content") || lowerType.includes("text")) {
+                mappedType = "textarea";
+              } else if (lowerName.includes("image") || lowerName.includes("photo") || lowerName.includes("avatar") || lowerName.includes("file")) {
+                mappedType = "file";
+              } else if (lowerName.includes("is_") || lowerName.includes("has_") || lowerName.includes("active") || lowerType.includes("bit") || lowerType.includes("boolean") || lowerType.includes("tinyint")) {
+                mappedType = "checkbox";
+              }
+
+              const inferredLookupTable = isFk ? lowerName.replace(/_id$/, "s") : "";
+
+              return {
+                id: "col_" + Math.random().toString(36).substr(2, 9),
+                name: c.name,
+                type: mappedType,
+                isRequired: isPk ? false : (lowerName === "name" || lowerName === "title" || lowerName === "price"),
+                isUnique: c.index === "UNIQUE" || isPk,
+                isListCol: !lowerName.includes("desc") && !lowerName.includes("content") && !["created_at", "updated_at", "deletedon", "createdon", "modifiedon", "created_by"].includes(lowerName),
+                isFormCol: !isPk && !["created_at", "updated_at", "created_on", "updated_on", "deletedon", "deleted_on", "deleted_at", "isdeleted", "modified", "modified_on", "modified_at", "created_by"].includes(lowerName),
+                index: isPk ? "PRIMARY KEY" : (c.index || ""),
+                isPrimaryKey: isPk,
+                isAutoIncrement: isPk,
+                selectType: isFk ? "table" : "static",
+                selectLookupTable: inferredLookupTable,
+                selectLookupValue: "id",
+                selectLookupLabel: "name"
+              };
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to import table columns", err);
+      }
     }
+
 
     // Default fallback columns if no columns specified
     if (columns.length === 0) {
@@ -343,7 +342,7 @@ export default function CrudFilesListPage() {
                                 <circle cx="12" cy="12" r="3" />
                                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                               </svg>
-                              Build UI
+                              Customize & Build UI
                             </button>
                              <button
     onClick={() => confirmDeleteFile(file.id, file.name)}

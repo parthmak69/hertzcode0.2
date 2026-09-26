@@ -537,8 +537,14 @@ export default function CategoriesPage() {
             formData.append('parentId', String(parentId))
             formData.append('primaryImageAction', imageAction)
 
-            if (imageAction === 'upload' && categoryImage) {
-                formData.append('primary_image_file', categoryImage)
+            if (imageAction === 'upload') {
+                if (categoryImage) {
+                    formData.append('primary_image_file', categoryImage)
+                } else if (imagePreview) {
+                    formData.append('primary_image_url', imagePreview)
+                }
+            } else if (imageAction === 'remove') {
+                formData.append('primary_image_url', '')
             }
 
             let res
