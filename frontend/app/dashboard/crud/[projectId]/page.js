@@ -97,6 +97,26 @@ export default function CrudFilesListPage() {
           { id: "col_content_" + Date.now(), name: "content", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
           { id: "col_status_" + Date.now(), name: "status", type: "select", selectType: "static", selectOptions: ["Active", "Inactive"], isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
         ];
+      } else if (premiumType === "products" || premiumType === "product") {
+        columns = [
+          { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+          { id: "col_name_" + Date.now(), name: "name", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_price_" + Date.now(), name: "price", type: "number", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_cat_" + Date.now(), name: "categoryID", type: "select", selectType: "table", selectLookupTable: "categories", selectLookupValue: "id", selectLookupLabel: "name", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_photo_" + Date.now(), name: "photo", type: "file", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_desc_" + Date.now(), name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
+          { id: "col_slug_" + Date.now(), name: "slug", type: "text", isRequired: false, isUnique: false, isListCol: false, isFormCol: true }
+        ];
+      } else if (premiumType === "orders" || premiumType === "order") {
+        columns = [
+          { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+          { id: "col_cust_id_" + Date.now(), name: "customer_id", type: "number", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_cust_" + Date.now(), name: "customer_name", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_email_" + Date.now(), name: "customer_email", type: "text", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_amt_" + Date.now(), name: "total_amount", type: "number", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_pay_" + Date.now(), name: "payment_method", type: "select", selectType: "static", selectOptions: ["COD", "Online", "Card", "UPI"], isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+          { id: "col_status_" + Date.now(), name: "status", type: "select", selectType: "static", selectOptions: ["Pending", "Confirmed", "Shipped", "Delivered", "Cancelled"], isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
+        ];
       }
     } else if (selectedImportTable) {
       try {
@@ -136,7 +156,7 @@ export default function CrudFilesListPage() {
                 type: mappedType,
                 isRequired: isPk ? false : (lowerName === "name" || lowerName === "title" || lowerName === "price"),
                 isUnique: c.index === "UNIQUE" || isPk,
-                isListCol: !lowerName.includes("desc") && !lowerName.includes("content") && !["created_at", "updated_at", "deletedon", "createdon", "modifiedon", "created_by"].includes(lowerName),
+                isListCol: !lowerName.includes("desc") && !lowerName.includes("content") && !["updated_at", "deletedon", "modifiedon"].includes(lowerName),
                 isFormCol: !isPk && !["created_at", "updated_at", "created_on", "updated_on", "deletedon", "deleted_on", "deleted_at", "isdeleted", "modified", "modified_on", "modified_at", "created_by"].includes(lowerName),
                 index: isPk ? "PRIMARY KEY" : (c.index || ""),
                 isPrimaryKey: isPk,
@@ -180,6 +200,31 @@ export default function CrudFilesListPage() {
         isAutoIncrement: true
       };
       columns = [defaultIdCol, ...columns];
+    }
+
+    // Auto-Ensure Audit & Soft Delete Columns exist in the schema
+    const colNamesSet = new Set(columns.map(c => c.name ? c.name.toLowerCase() : ''));
+    if (!colNamesSet.has("isdeleted") && !colNamesSet.has("is_deleted")) {
+      columns.push({
+        id: "col_isdeleted_" + Date.now(),
+        name: "isDeleted",
+        type: "number",
+        isRequired: false,
+        isUnique: false,
+        isListCol: false,
+        isFormCol: false
+      });
+    }
+    if (!colNamesSet.has("deletedon") && !colNamesSet.has("deleted_on")) {
+      columns.push({
+        id: "col_deletedon_" + (Date.now() + 1),
+        name: "deletedOn",
+        type: "datetime",
+        isRequired: false,
+        isUnique: false,
+        isListCol: false,
+        isFormCol: false
+      });
     }
 
     const newFile = {
@@ -434,6 +479,8 @@ export default function CrudFilesListPage() {
                     <option value="portfolio">Portfolio Cards</option>
                     <option value="categories">Categories Folder</option>
                     <option value="admins">Admins System</option>
+                    <option value="products">Products Catalog</option>
+                    <option value="orders">Orders System</option>
                   </select>
                 </div>
 

@@ -2,10 +2,11 @@
 
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, Shield } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import AdminForm from '@/components/forms/AdminsForm'
+import { apiClient } from '@/utils/api'
 
 export default function AdminDetailsPage() {
     const { id } = useParams()
@@ -58,6 +59,7 @@ export default function AdminDetailsPage() {
                     full_name: data.full_name ?? data.name ?? data.fullName ?? '',
                     email: data.email ?? '',
                     phone: data.phone ?? '-',
+                    profile_image: data.profile_image || data.image_url || data.avatar || data.image || '',
                     isActive: data.isActive ?? (data.isDeleted === 0),
                     created_at: formatDate(data.created_at ?? data.createdAt),
                 })
@@ -104,15 +106,29 @@ export default function AdminDetailsPage() {
             if (formData.password) {
                 payload.password = formData.password
             }
+            if (formData.profile_image !== undefined) {
+                payload.profile_image = formData.profile_image
+            }
 
-            await fetch(`/api/admin/admins/${id}`, {
-                method: 'PUT',
-                headers: getAuthHeaders({
-                    'Content-Type': 'application/json',
-                }),
-                body: JSON.stringify(payload),
-                credentials: 'include'
-            })
+            if (formData.imageFile) {
+                const fd = new FormData()
+                fd.append('full_name', payload.full_name)
+                fd.append('email', payload.email)
+                if (payload.phone) fd.append('phone', payload.phone)
+                if (payload.password) fd.append('password', payload.password)
+                fd.append('primary_image_file', formData.imageFile)
+                fd.append('profile_image', formData.imageFile)
+                await apiClient.upload(`/admin/admins/${id}`, fd, 'PUT')
+            } else {
+                await fetch(`/api/admin/admins/${id}`, {
+                    method: 'PUT',
+                    headers: getAuthHeaders({
+                        'Content-Type': 'application/json',
+                    }),
+                    body: JSON.stringify(payload),
+                    credentials: 'include'
+                })
+            }
 
             // Refresh details page state
             await loadAdminData()
@@ -140,11 +156,17 @@ export default function AdminDetailsPage() {
         )
     }
 
+    const imgSrc = admin.profile_image ? (
+        admin.profile_image.startsWith('http') || admin.profile_image.startsWith('data:')
+            ? admin.profile_image
+            : `http://localhost:5001${admin.profile_image.startsWith('/') ? '' : '/'}${admin.profile_image}`
+    ) : null
+
     return (
         <div className="min-h-full bg-background p-6 space-y-6">
 
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 
                 <div className="flex items-center gap-4">
                     <button
@@ -153,6 +175,23 @@ export default function AdminDetailsPage() {
                     >
                         <ArrowLeft className="w-5 h-5 text-muted-foreground" />
                     </button>
+
+                    <div className="relative w-14 h-14 rounded-full overflow-hidden border-2 border-primary/20 bg-secondary flex shrink-0 items-center justify-center shadow-sm">
+                        {imgSrc ? (
+                            <img
+                                src={imgSrc}
+                                alt={admin.full_name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                    e.target.style.display = 'none'
+                                    if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex'
+                                }}
+                            />
+                        ) : null}
+                        <div className={`w-full h-full font-bold text-lg text-primary bg-primary/10 flex items-center justify-center ${imgSrc ? 'hidden' : 'flex'}`}>
+                            {admin.full_name ? admin.full_name.charAt(0).toUpperCase() : <Shield className="w-6 h-6" />}
+                        </div>
+                    </div>
 
                     <div>
                         <h1 className="text-2xl font-bold text-foreground">

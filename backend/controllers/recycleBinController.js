@@ -1,7 +1,7 @@
 import mysql from "mysql2/promise";
 
 const getDbConfig = () => ({
-  host: process.env.DB_HOST || "localhost",
+  host: process.env.DB_HOST || "127.0.0.1",
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
 });
@@ -108,6 +108,16 @@ export const restoreItem = async (req, res) => {
 
       // Restore Database: add it back to active user's tracking
       const userToRestore = item.original_owner || username;
+
+      try {
+        await connection.execute(
+          "UPDATE `hertz_projects` SET `isDeleted` = 0, `deletedAt` = NULL WHERE `databaseName` = ? OR `name` = ?",
+          [item.item_name, item.item_name]
+        );
+      } catch (e) {
+        console.warn("[restoreItem] hertz_projects restore notice:", e.message);
+      }
+
       const [userRows] = await connection.execute(
         "SELECT created_databases FROM user_cred WHERE username = ? LIMIT 1",
         [userToRestore]

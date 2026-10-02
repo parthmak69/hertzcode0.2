@@ -1,7 +1,7 @@
-const multer = require('multer')
-const fs = require('fs/promises')
-const path = require('path')
-const { getStorageStatus } = require('../utils/storageHelper')
+import multer from 'multer'
+import fs from 'fs/promises'
+import path from 'path'
+import { getStorageStatus } from '../utils/storageHelper.js'
 
 const upload = multer({ storage: multer.memoryStorage() })
 
@@ -26,13 +26,8 @@ const uploadParser = [
         }
 
         if (!req.files || req.files.length === 0) {
-            if (req.body) {
-                if (req.body.existing_gallery_urls !== undefined) {
-                    req.body.gallery_images = req.body.existing_gallery_urls
-                }
-                if (req.body.primaryImageAction === 'remove') {
-                    req.body.primary_image_url = ''
-                }
+            if (req.body && req.body.existing_gallery_urls !== undefined) {
+                req.body.gallery_images = req.body.existing_gallery_urls
             }
             return next()
         }
@@ -52,51 +47,52 @@ const uploadParser = [
                 })
             }
 
-            const files = { gallery_files: [] }
-            for (const file of req.files) {
-                if (file.fieldname === 'gallery_files' || file.fieldname === 'product_images' || file.fieldname === 'secondary_images') {
-                    files.gallery_files.push(file)
-                } else {
-                    files[file.fieldname] = file
-                }
-            }
+            const uploadDirPrimary = path.resolve('./public/uploads')
+            const uploadDirSecondary = path.resolve('./uploads')
+            await fs.mkdir(uploadDirPrimary, { recursive: true })
+            await fs.mkdir(uploadDirSecondary, { recursive: true })
 
-            const uploadDir = process.env.MEDIA || path.join(__dirname, '..', 'uploads')
-            await fs.mkdir(uploadDir, { recursive: true })
-
-            // 1. Primary image file
-            const primaryFile = files.primary_image_file || files.product_image || files.primary_image || files.primary_image_url
-            if (primaryFile && primaryFile.size > 0) {
-                const ext = path.extname(primaryFile.originalname) || '.jpg'
-                const filename = `primary-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`
-                await fs.writeFile(path.join(uploadDir, filename), primaryFile.buffer)
-                req.body.primary_image_url = `uploads/${filename}`
-            } else if (req.body.primaryImageAction === 'remove') {
-                req.body.primary_image_url = ''
-            }
-
-            // 2. Document file
-            const docFile = files.document_file || files.document_file_url
-            if (docFile && docFile.size > 0) {
-                const ext = path.extname(docFile.originalname) || '.pdf'
-                const filename = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`
-                await fs.writeFile(path.join(uploadDir, filename), docFile.buffer)
-                req.body.document_file_url = `uploads/${filename}`
-            } else if (req.body.documentFileAction === 'remove') {
-                req.body.document_file_url = ''
-            }
-
-            // 3. Gallery / Secondary files
+            let firstSavedUrl = ''
             const newGalleryUrls = []
-            if (files.gallery_files.length > 0) {
-                for (const file of files.gallery_files) {
-                    if (file.size > 0) {
-                        const ext = path.extname(file.originalname) || '.jpg'
-                        const filename = `gallery-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`
-                        await fs.writeFile(path.join(uploadDir, filename), file.buffer)
-                        newGalleryUrls.push(`uploads/${filename}`)
+
+            for (const file of req.files) {
+                if (file.size > 0) {
+                    const ext = path.extname(file.originalname) || '.jpg'
+                    const prefix = file.fieldname || 'file'
+                    const filename = `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`
+                    const targetPath1 = path.join(uploadDirPrimary, filename)
+                    const targetPath2 = path.join(uploadDirSecondary, filename)
+
+                    await fs.writeFile(targetPath1, file.buffer)
+                    try {
+                        await fs.writeFile(targetPath2, file.buffer)
+                    } catch (e) {
+                        // ignore secondary write error if dir is locked
+                    }
+
+                    const savedUrl = `/uploads/${filename}`
+                    file.savedUrl = savedUrl
+                    if (!firstSavedUrl) firstSavedUrl = savedUrl
+
+                    req.body[file.fieldname] = savedUrl
+                    if (['file', 'photo', 'image', 'avatar', 'primary_image_file', 'product_image', 'primary_image'].includes(file.fieldname)) {
+                        req.body.primary_image_url = savedUrl
+                        req.body.photo = savedUrl
+                        req.body.image = savedUrl
+                        req.body.image_url = savedUrl
+                        req.body.fileUrl = savedUrl
+                        req.body.url = savedUrl
+                    }
+
+                    if (['gallery_files', 'product_images', 'secondary_images'].includes(file.fieldname)) {
+                        newGalleryUrls.push(savedUrl)
                     }
                 }
+            }
+
+            if (firstSavedUrl) {
+                req.uploadedUrl = firstSavedUrl
+                req.fileUrl = firstSavedUrl
             }
 
             const existingGalleryUrls = Array.isArray(req.body.existing_gallery_urls) ? req.body.existing_gallery_urls : []
@@ -109,4 +105,4 @@ const uploadParser = [
     }
 ]
 
-module.exports = uploadParser
+export default uploadParser

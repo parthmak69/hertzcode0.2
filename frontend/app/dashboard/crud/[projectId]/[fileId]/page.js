@@ -36,7 +36,37 @@ export default function CrudUiConfigPage() {
         setProject(foundProj);
         const foundFile = foundProj.files.find((f) => f.id === fileId);
         if (foundFile) {
-          setFile(foundFile);
+          const colNames = new Set((foundFile.columns || []).map(c => c.name ? c.name.toLowerCase() : ''));
+          let updatedCols = [...(foundFile.columns || [])];
+          let changed = false;
+
+          if (!colNames.has("isdeleted") && !colNames.has("is_deleted")) {
+            updatedCols.push({
+              id: "col_isdeleted_" + Date.now(),
+              name: "isDeleted",
+              type: "number",
+              isRequired: false,
+              isUnique: false,
+              isListCol: false,
+              isFormCol: false
+            });
+            changed = true;
+          }
+          if (!colNames.has("deletedon") && !colNames.has("deleted_on")) {
+            updatedCols.push({
+              id: "col_deletedon_" + (Date.now() + 1),
+              name: "deletedOn",
+              type: "datetime",
+              isRequired: false,
+              isUnique: false,
+              isListCol: false,
+              isFormCol: false
+            });
+            changed = true;
+          }
+
+          const fileObj = changed ? { ...foundFile, columns: updatedCols } : foundFile;
+          setFile(fileObj);
         }
         databaseService.getTables(foundProj.databaseName)
           .then((data) => {

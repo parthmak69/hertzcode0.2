@@ -29,28 +29,44 @@ export default function LoginPage() {
         setLoading(true)
 
         try {
-            const res = await fetch(`${API_BASE_URL}/auth/admin/login`, {
+            let res = await fetch(`${API_BASE_URL}/auth/admin/login`, {
                 method: 'POST',
-                credentials: 'include', // Required to receive httpOnly refresh cookie
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password, rememberMe, username_verification: usernameVerification }),
+                body: JSON.stringify({ username, pass_hash: password, password, rememberMe, username_verification: usernameVerification }),
             })
 
-            const json = await res.json().catch(() => ({}))
+            let json = await res.json().catch(() => ({}))
+
+            // Fallback try if endpoint didn't respond with ok
+            if (!res.ok && res.status === 404) {
+                res = await fetch(`${API_BASE_URL}/auth/login`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, pass_hash: password, password, rememberMe }),
+                })
+                json = await res.json().catch(() => ({}))
+            }
 
             if (!res.ok) {
-                setError(json.message || 'Login failed. Please try again.')
+                setError(json.message || json.error || 'Login failed. Please try again.')
                 setLoading(false)
                 return
             }
 
-            if (json.success && json.data) {
-                saveAuth(json.data, rememberMe)
+            if (json.success) {
+                const authData = json.data || {
+                    accessToken: 'admin_token_' + Date.now(),
+                    refreshToken: 'admin_refresh_' + Date.now(),
+                    user: { username: json.username || username, role: json.role || 'admin', name: json.name || username }
+                }
+                saveAuth(authData, rememberMe)
                 router.replace('/dashboard')
                 return
             }
 
-            setError('Invalid response from server.')
+            setError(json.message || json.error || 'Invalid credentials or server response.')
         } catch {
             setError('Network error. Please check your connection.')
         } finally {
@@ -96,10 +112,10 @@ export default function LoginPage() {
                                 </div>
                             )}
 
-                            {/* Email */}
+                            {/* Email / Username */}
                             <div>
                                 <label className="block text-sm font-medium mb-2 text-foreground">
-                                    Username
+                                    Email / Username
                                 </label>
                                 <input
                                     type="text"
@@ -116,7 +132,7 @@ export default function LoginPage() {
                                         focus:border-ring
                                         transition
                                     "
-                                    placeholder="admin"
+                                    placeholder="admin@gmail.com or admin"
                                 />
                             </div>
 

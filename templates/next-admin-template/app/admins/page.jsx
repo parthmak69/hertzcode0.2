@@ -18,14 +18,17 @@ import ImportModal from '@/components/modals/ImportModal'
 /* -------------------------------------------------------------------------- */
 
 const allColumns = [
+    { key: 'profile_image', label: 'Avatar', width: '80px', sortable: false, filterable: false },
     { key: 'full_name', label: 'Full Name', filterable: true, sortable: true, width: '180px' },
     { key: 'email', label: 'Email', filterable: true, sortable: true, width: '180px' },
+    { key: 'phone', label: 'Phone', filterable: true, sortable: true, width: '150px' },
 ]
 
 const exportColumns = [
     { key: 'id', label: 'Admin ID' },
     { key: 'full_name', label: 'Full Name' },
     { key: 'email', label: 'Email' },
+    { key: 'phone', label: 'Phone' },
     { key: 'is_active', label: 'Active' },
     { key: 'created_at', label: 'Created At' },
 ]
@@ -171,22 +174,40 @@ export default function AdminsPage() {
         setFormError('')
 
         const payload = {
-            full_name: formData.fullName,
+            full_name: formData.fullName || formData.full_name,
             email: formData.email,
         }
 
-        // Include phone field if it exists in formData (even if empty to clear it)
         if (formData.phone !== undefined) {
             payload.phone = formData.phone
+        }
+
+        if (formData.profile_image !== undefined) {
+            payload.profile_image = formData.profile_image
         }
 
         if (formData.password) {
             payload.password = formData.password
         }
 
-        const res = editingAdmin
-            ? await update(editingAdmin.id, payload)
-            : await create(payload)
+        let res
+        if (formData.imageFile) {
+            const fd = new FormData()
+            fd.append('full_name', payload.full_name)
+            fd.append('email', payload.email)
+            if (payload.phone) fd.append('phone', payload.phone)
+            if (payload.password) fd.append('password', payload.password)
+            fd.append('primary_image_file', formData.imageFile)
+            fd.append('profile_image', formData.imageFile)
+
+            res = editingAdmin
+                ? await update(editingAdmin.id, fd, true)
+                : await create(fd, true)
+        } else {
+            res = editingAdmin
+                ? await update(editingAdmin.id, payload)
+                : await create(payload)
+        }
 
         if (res.success) {
             setIsModalOpen(false)
@@ -195,7 +216,6 @@ export default function AdminsPage() {
             setFormError(res.message || 'Something went wrong')
         }
     }
-
 
     const handleExportExcel = () => {
         const rows = (data || []).map((a) => ({
@@ -210,6 +230,41 @@ export default function AdminsPage() {
     }
 
     const renderCell = (item, colKey) => {
+        const val = item[colKey]
+        const keyLower = String(colKey).toLowerCase()
+        const isImgCol = keyLower.includes('photo') || keyLower.includes('image') || keyLower.includes('pic') || keyLower.includes('avatar') || keyLower.includes('thumb') || keyLower.includes('profile')
+        const isImgVal = typeof val === 'string' && (val.startsWith('/uploads/') || val.startsWith('uploads/') || val.startsWith('http://') || val.startsWith('https://') || val.startsWith('data:image/'))
+
+        if (isImgCol || isImgVal) {
+            const hasVal = Boolean(val && String(val).trim())
+            if (!hasVal) {
+                return (
+                    <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-primary text-xs shadow-2xs">
+                        {item.full_name ? item.full_name.charAt(0).toUpperCase() : 'A'}
+                    </div>
+                )
+            }
+            const cleanPath = String(val).startsWith('uploads/') ? '/' + val : String(val)
+            const src = cleanPath.startsWith('http') || cleanPath.startsWith('data:') ? cleanPath : `http://localhost:5001${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`
+            return (
+                <div className="flex items-center gap-2">
+                    <div className="relative w-9 h-9 rounded-full overflow-hidden border border-border bg-secondary/40 shadow-xs flex shrink-0">
+                        <img
+                            src={src}
+                            alt={item.full_name || 'Avatar'}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                                e.target.style.display = 'none'
+                                if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex'
+                            }}
+                        />
+                        <div className="hidden w-full h-full items-center justify-center font-bold text-primary bg-primary/10 text-xs">
+                            {item.full_name ? item.full_name.charAt(0).toUpperCase() : 'A'}
+                        </div>
+                    </div>
+                </div>
+            )
+        }
         return item[colKey] ?? '-'
     }
 
@@ -330,11 +385,17 @@ export default function AdminsPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {data.map((admin) => {
                                 const isSelected = selectedIds.includes(admin.id)
+                                const imgSrc = admin.profile_image ? (
+                                    admin.profile_image.startsWith('http') || admin.profile_image.startsWith('data:')
+                                        ? admin.profile_image
+                                        : `http://localhost:5001${admin.profile_image.startsWith('/') ? '' : '/'}${admin.profile_image}`
+                                ) : null
+
                                 return (
                                     <div key={admin.id} className={`p-5 rounded-2xl bg-card border shadow-sm flex flex-col justify-between gap-4 transition duration-200 ${isSelected ? 'border-primary' : 'border-border/80'}`}>
                                         {/* Header */}
                                         <div className="flex justify-between items-start gap-2">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-3">
                                                 <input
                                                     type="checkbox"
                                                     checked={isSelected}
@@ -347,6 +408,22 @@ export default function AdminsPage() {
                                                     }}
                                                     className="w-4 h-4 text-primary border-border rounded focus:ring-primary/20 cursor-pointer"
                                                 />
+                                                <div className="relative w-10 h-10 rounded-full overflow-hidden border border-border bg-secondary flex shrink-0 items-center justify-center">
+                                                    {imgSrc ? (
+                                                        <img
+                                                            src={imgSrc}
+                                                            alt={admin.full_name || 'Avatar'}
+                                                            className="w-full h-full object-cover"
+                                                            onError={(e) => {
+                                                                e.target.style.display = 'none'
+                                                                if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex'
+                                                            }}
+                                                        />
+                                                    ) : null}
+                                                    <div className={`w-full h-full font-bold text-xs text-primary bg-primary/10 flex items-center justify-center ${imgSrc ? 'hidden' : 'flex'}`}>
+                                                        {admin.full_name ? admin.full_name.charAt(0).toUpperCase() : 'A'}
+                                                    </div>
+                                                </div>
                                                 <div className="min-w-0">
                                                     <span className="font-mono text-xs text-muted-foreground">#ADM-{admin.id}</span>
                                                     <h3 className="font-bold text-foreground text-sm truncate mt-0.5">{admin.full_name}</h3>
@@ -450,7 +527,8 @@ export default function AdminsPage() {
                         editingAdmin
                             ? {
                                 ...editingAdmin,
-                                fullName: editingAdmin.full_name,
+                                fullName: editingAdmin.full_name || editingAdmin.name,
+                                profile_image: editingAdmin.profile_image || editingAdmin.image_url || editingAdmin.avatar || '',
                             }
                             : null
                     }

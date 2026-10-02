@@ -149,13 +149,13 @@ export default function PortfolioPage() {
     }
 
     const handleShuffleToggle = () => {
-        if (!isShuffled) {
-            setShuffledList(shuffleArray(filteredData))
-            setIsShuffled(true)
-        } else {
-            setIsShuffled(false)
-            setShuffledList([])
-        }
+        setShuffledList(shuffleArray(filteredData))
+        setIsShuffled(true)
+    }
+
+    const handleResetShuffle = () => {
+        setIsShuffled(false)
+        setShuffledList([])
     }
 
     // Reset shuffle/drag ONLY when filters change, NOT when data updates!
@@ -214,13 +214,13 @@ export default function PortfolioPage() {
 
     // Folder shuffling & Drag-and-drop handlers
     const handleFolderShuffleToggle = () => {
-        if (!isFolderShuffled) {
-            setShuffledFoldersList(shuffleArray(categoriesSummary))
-            setIsFolderShuffled(true)
-        } else {
-            setIsFolderShuffled(false)
-            setShuffledFoldersList([])
-        }
+        setShuffledFoldersList(shuffleArray(categoriesSummary))
+        setIsFolderShuffled(true)
+    }
+
+    const handleFolderResetShuffle = () => {
+        setIsFolderShuffled(false)
+        setShuffledFoldersList([])
     }
 
     const displayFolders = useMemo(() => {

@@ -398,6 +398,8 @@ export default function AdvancedCrudBuilder() {
               <option value="categories" style={{ color: "black" }}>📁 Categories Folder</option>
               <option value="settings" style={{ color: "black" }}>⚙️ Settings Panel</option>
               <option value="admins" style={{ color: "black" }}>🛡️ Admins System</option>
+              <option value="products" style={{ color: "black" }}>🛍️ Products Catalog</option>
+              <option value="orders" style={{ color: "black" }}>📦 Orders System</option>
             </select>
           </div>
           <span style={{ color: "#94a3b8", fontSize: "13px" }}>Database: <b>{project.databaseName}</b></span>

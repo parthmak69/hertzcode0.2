@@ -21,9 +21,10 @@ export const UPLOADS_BASE_URL = ''
  * Handles both relative paths and absolute URLs.
  */
 export function getImageUrl(path) {
-    if (!path) return null
-    if (path.startsWith('http')) return path
-    return `/${path.replace(/^\/+/, '')}`
+    if (!path) return ''
+    if (path.startsWith('http') || path.startsWith('data:')) return path
+    const cleanPath = path.startsWith('/') ? path : '/' + path
+    return `http://localhost:5001${cleanPath}`
 }
 
 export const AUTH_STORAGE_KEYS = {

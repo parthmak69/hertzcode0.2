@@ -297,14 +297,23 @@ export default function PortalDashboardPage() {
     showToast("Admin Portal: Logged out successfully", "success");
     router.push(`/dashboard/crud/${projectId}/admin-portal/login`);
   };
+  const getImgSrc = (val) => {
+    if (!val || typeof val !== "string") return "";
+    let clean = val.trim();
+    if (clean.startsWith("uploads/")) clean = "/" + clean;
+    if (clean.startsWith("http://") || clean.startsWith("https://") || clean.startsWith("data:")) return clean;
+    return `http://localhost:5001${clean.startsWith("/") ? "" : "/"}${clean}`;
+  };
+
   const isImageUrl = (colName, value) => {
-    if (typeof value !== "string") return false;
+    if (typeof value !== "string" || !value.trim()) return false;
     const lowerCol = colName.toLowerCase();
     const isImgCol = lowerCol.includes("image") || lowerCol.includes("avatar") || lowerCol.includes("photo") || lowerCol.includes("pic") || lowerCol.includes("thumbnail");
+    const isUploadPath = value.startsWith("/uploads/") || value.startsWith("uploads/") || value.startsWith("data:image/");
     const hasImgExtension = /\.(jpeg|jpg|gif|png|webp|svg)/i.test(value);
     const startsWithHttp = value.startsWith("http://") || value.startsWith("https://");
     const isPicsum = value.includes("picsum.photos");
-    return isImgCol || startsWithHttp && (hasImgExtension || isPicsum);
+    return isImgCol || isUploadPath || (startsWithHttp && (hasImgExtension || isPicsum));
   };
   const filteredItems = items.filter((item) => {
     return Object.values(item).some(
@@ -546,14 +555,23 @@ export default function PortalDashboardPage() {
                                 return (
                                   <td key={col.id} style={styles.td}>
                                     {isImg ? (
-                                      <img
-                                        src={String(val)}
-                                        alt={col.name}
-                                        style={styles.thumbnail}
-                                        onError={(e) => {
-                                          e.currentTarget.style.display = "none";
-                                        }}
-                                      />
+                                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <img
+                                          src={getImgSrc(val)}
+                                          alt={col.name}
+                                          style={styles.thumbnail}
+                                          onError={(e) => {
+                                            if (!e.currentTarget.dataset.triedFallback && typeof val === "string" && !val.startsWith("http")) {
+                                              e.currentTarget.dataset.triedFallback = "true";
+                                              e.currentTarget.src = val.startsWith("/") ? val : "/" + val;
+                                              return;
+                                            }
+                                            e.currentTarget.style.display = "none";
+                                            if (e.currentTarget.nextSibling) e.currentTarget.nextSibling.style.display = "inline";
+                                          }}
+                                        />
+                                        <span style={{ display: "none", fontSize: "11px", color: "#6b7280", fontFamily: "monospace" }}>{String(val)}</span>
+                                      </div>
                                     ) : (
                                       displayVal
                                     )}
@@ -679,7 +697,7 @@ export default function PortalDashboardPage() {
     return <div key={col.id} style={styles.modalRow}>
                     <span style={styles.modalKey}>{col.name}:</span>
                     <span style={styles.modalVal}>
-                      {isImg ? <img src={String(val)} alt={col.name} style={{ maxWidth: "100%", maxHeight: "180px", borderRadius: "4px", objectFit: "contain" }} /> : String(val !== void 0 && val !== null ? val : "")}
+                      {isImg ? <img src={getImgSrc(val)} alt={col.name} style={{ maxWidth: "100%", maxHeight: "180px", borderRadius: "4px", objectFit: "contain" }} onError={(e) => { e.currentTarget.src = val && String(val).startsWith('/') ? String(val) : '/' + String(val); }} /> : String(val !== void 0 && val !== null ? val : "")}
                     </span>
                   </div>;
   })}

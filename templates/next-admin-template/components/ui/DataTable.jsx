@@ -98,12 +98,12 @@ export default function DataTable({
         const refVal = val !== undefined && val !== null ? val : item[colKey]
 
         if (readOnlyKeys.includes(colKey)) {
-            return renderCell ? renderCell(item, colKey) : item[colKey]
+            return renderCell ? renderCell(item, colKey) : formatCellValue(item[colKey], colKey)
         }
 
         // Skip inline edit for arrays and objects — render them read-only
         if (Array.isArray(refVal) || (typeof refVal === 'object' && refVal !== null)) {
-            return renderCell ? renderCell(item, colKey) : item[colKey]
+            return renderCell ? renderCell(item, colKey) : formatCellValue(item[colKey], colKey)
         }
 
         if (colKey === 'switch_active' || colKey === 'checkbox_toggle' || typeof refVal === 'boolean') {
@@ -172,6 +172,60 @@ export default function DataTable({
             setLocalFilters((prev) => ({ ...prev, ...filtersProp }))
         }
     }, [filtersProp])
+
+    const formatCellValue = (val, colKey = '') => {
+        if (val === null || val === undefined) return ''
+        const keyLower = String(colKey).toLowerCase()
+        const valStr = String(val).trim()
+
+        const isImgCol = keyLower.includes('photo') || keyLower.includes('image') || keyLower.includes('pic') || keyLower.includes('avatar') || keyLower.includes('thumb') || keyLower.includes('logo') || keyLower.includes('img')
+        const isImgVal = typeof val === 'string' && (valStr.startsWith('/uploads/') || valStr.startsWith('uploads/') || valStr.startsWith('http://') || valStr.startsWith('https://') || valStr.startsWith('data:image/'))
+
+        if ((isImgCol && valStr !== '') || isImgVal) {
+            let cleanPath = valStr
+            if (cleanPath.startsWith('uploads/')) cleanPath = '/' + cleanPath
+            const backendUrl = (cleanPath.startsWith('http') || cleanPath.startsWith('data:'))
+                ? cleanPath
+                : cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath
+
+            return (
+                <div className="flex items-center gap-2">
+                    <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-border bg-secondary/40 shadow-xs flex-shrink-0">
+                        <img
+                            src={backendUrl}
+                            alt="Thumbnail"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                                if (!e.target.dataset.triedFallback && !cleanPath.startsWith('http') && !cleanPath.startsWith('data:')) {
+                                    e.target.dataset.triedFallback = 'true'
+                                    e.target.src = `http://localhost:5001${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`
+                                    return
+                                }
+                                e.target.onerror = null
+                                e.target.style.display = 'none'
+                                if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex'
+                            }}
+                        />
+                        <div className="hidden w-full h-full items-center justify-center bg-secondary/60 text-muted-foreground">
+                            <svg className="w-5 h-5 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            )
+        }
+
+        if (typeof val === 'boolean') {
+            return val ? 'Yes' : 'No'
+        }
+
+        if (typeof val === 'object') {
+            return JSON.stringify(val)
+        }
+
+        return valStr
+    }
 
     const showActions = onView || viewPath || onEdit || onDelete || renderExtraActions
     const handleFilterChange = (key, value) => {
@@ -422,7 +476,7 @@ export default function DataTable({
                                                                     onClick={(e) => {
                                                                         e.stopPropagation()
                                                                         setActiveDropdownRowId(null)
-                                                                        onDelete(item.id)
+                                                                        onDelete(item)
                                                                     }}
                                                                     className="flex items-center gap-2.5 w-full px-3.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 transition cursor-pointer"
                                                                 >
@@ -471,7 +525,7 @@ export default function DataTable({
                                             >
                                                 {editingRowId === item.id
                                                     ? renderInlineInput(col, item)
-                                                    : (renderCell ? renderCell(item, col.key) : item[col.key])
+                                                    : (renderCell ? renderCell(item, col.key) : formatCellValue(item[col.key], col.key))
                                                 }
                                             </td>
                                         ))}
@@ -588,7 +642,7 @@ export default function DataTable({
                                                                 onClick={(e) => {
                                                                     e.stopPropagation()
                                                                     setActiveDropdownRowId(null)
-                                                                    onDelete(item.id)
+                                                                    onDelete(item)
                                                                 }}
                                                                 className="flex items-center gap-2.5 w-full px-3.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 transition cursor-pointer"
                                                             >
@@ -621,7 +675,7 @@ export default function DataTable({
                                             <div className="col-span-2 text-foreground text-right self-center min-w-0 break-all">
                                                 {editingRowId === item.id
                                                     ? renderInlineInput(col, item)
-                                                    : (renderCell ? renderCell(item, col.key) : item[col.key])
+                                                    : (renderCell ? renderCell(item, col.key) : formatCellValue(item[col.key], col.key))
                                                 }
                                             </div>
                                         </div>

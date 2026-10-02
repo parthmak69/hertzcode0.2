@@ -22,7 +22,14 @@ const DatabaseIcon = () => (
   </svg>
 );
 
-export default function DbRow({ db, idx, currentUser, activeTab, onNavigate, onDelete }) {
+const PlusIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+export default function DbRow({ db, idx, currentUser, activeTab, onNavigate, onDelete, onAddQuickTables }) {
   const displayDbName = db.name.startsWith("mongodb:")
     ? db.name.replace("mongodb:", "")
     : db.name;
@@ -43,6 +50,15 @@ export default function DbRow({ db, idx, currentUser, activeTab, onNavigate, onD
       </td>
       <td style={{ padding: "14px 16px" }}>
         <div style={{ display: "flex", gap: "8px" }}>
+          {onAddQuickTables && (
+            <button
+              className="db-action-btn"
+              title="Add Quick Tables"
+              onClick={() => onAddQuickTables(displayDbName)}
+            >
+              <PlusIcon />
+            </button>
+          )}
           <button className="db-action-btn" title="Sync / Share">
             <SyncIcon />
           </button>

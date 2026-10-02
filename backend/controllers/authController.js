@@ -2,7 +2,7 @@ import mysql from "mysql2/promise";
 
 // Helper to get raw database credentials from env
 const getDbConfig = () => ({
-  host: process.env.DB_HOST || "localhost",
+  host: process.env.DB_HOST || "127.0.0.1",
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
 });
@@ -10,7 +10,8 @@ const getDbConfig = () => ({
 export const login = async (req, res) => {
   let connection;
   try {
-    const { username, pass_hash } = req.body;
+    const username = req.body.username;
+    const pass_hash = req.body.pass_hash || req.body.password;
 
     if (!username || !pass_hash) {
       return res.status(400).json({ success: false, error: "Username and password are required." });

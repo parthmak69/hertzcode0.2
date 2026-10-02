@@ -1,138 +1,90 @@
-const categoryModel = require('../models/categoryModel')
-const { deletePhysicalFile } = require('../utils/storageHelper')
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+import * as categoryModel from '../models/categoryModel.js';
 
-const categoryController = {
-    async listCategories(req, res) {
-        try {
-            const parentId = (req.query.parentId === undefined || req.query.parentId === 'null' || req.query.parentId === '') ? null : req.query.parentId
-            const data = await categoryModel.listCategories(parentId)
-            return res.json({ success: true, data })
-        } catch (err) {
-            console.error('[Category Controller Error]', err)
-            return res.status(500).json({ success: false, message: 'Server error listing categories.' })
-        }
-    },
+export const listCategories = async (req, res) => {
+  try {
+    const categories = await categoryModel.getAllCategories(req.user?.id || 1);
+    res.json({ success: true, data: categories });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
-    async getCategoryDetail(req, res) {
-        try {
-            const { id } = req.params
-            const data = await categoryModel.getCategoryById(id)
+export const getCategoryDetail = async (req, res) => {
+  try {
+    const category = await categoryModel.getCategoryById(req.params.id, req.user?.id || 1);
+    if (!category) return res.status(404).json({ success: false, message: 'Category not found' });
+    res.json({ success: true, data: category });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
-            if (!data) {
-                return res.status(404).json({ success: false, message: 'Category not found.' })
-            }
+export const createCategory = async (req, res) => {
+  try {
+    const rawData = { ...req.body };
+    const cleanData = {};
 
-            return res.json({ success: true, data })
-        } catch (err) {
-            console.error('[Category Controller Error]', err)
-            return res.status(500).json({ success: false, message: 'Server error fetching category.' })
-        }
-    },
+    if (rawData.name) cleanData.name = rawData.name.trim();
+    if (rawData.description !== undefined) cleanData.description = rawData.description;
 
-    async createCategory(req, res) {
-        try {
-            const { name, description, parentId } = req.body
-            const image_url = req.body.primary_image_url || req.body.image_url || ''
-
-            if (!name || !name.trim()) {
-                return res.status(400).json({ success: false, message: 'Category name is required.' })
-            }
-
-            const insertRes = await categoryModel.createCategory({
-                name: name.trim(),
-                description: description || '',
-                image_url: image_url,
-                parent_id: (parentId === 'null' || parentId === '' || parentId === 'undefined' || parentId === undefined) ? null : parentId
-            })
-
-            return res.status(201).json({
-                success: true,
-                message: 'Category created successfully.',
-                id: insertRes.insertId
-            })
-        } catch (err) {
-            console.error('[Category Controller Error]', err)
-            return res.status(500).json({ success: false, message: 'Server error creating category.' })
-        }
-    },
-
-    async updateCategory(req, res) {
-        try {
-            const { id } = req.params
-            const currentItem = await categoryModel.getCategoryById(id)
-
-            if (!currentItem) {
-                return res.status(404).json({ success: false, message: 'Category not found.' })
-            }
-
-            const { name, description, parentId, primaryImageAction } = req.body
-            let image_url = currentItem.image_url
-            if (primaryImageAction === 'remove') {
-                image_url = ''
-            } else if (req.body.primary_image_url !== undefined) {
-                image_url = req.body.primary_image_url
-            }
-
-            const updateFields = {
-                name: name !== undefined ? name.trim() : currentItem.name,
-                description: description !== undefined ? description : currentItem.description,
-                image_url,
-                parent_id: (parentId !== undefined && parentId !== 'undefined') ? ((parentId === 'null' || parentId === '') ? null : parentId) : currentItem.parent_id,
-                primaryImageAction
-            }
-
-            // Clean up old file if removed or updated with a new one
-            if ((primaryImageAction === 'remove' || (req.body.primary_image_url && req.body.primary_image_url !== currentItem.image_url)) && currentItem.image_url && !currentItem.image_url.startsWith('http')) {
-                await deletePhysicalFile(currentItem.image_url)
-            }
-
-            await categoryModel.updateCategory(id, updateFields)
-            return res.json({ success: true, message: 'Category updated successfully.' })
-        } catch (err) {
-            console.error('[Category Controller Error]', err)
-            return res.status(500).json({ success: false, message: 'Server error updating category.' })
-        }
-    },
-
-    async deleteCategory(req, res) {
-        try {
-            const { id } = req.params
-            const currentItem = await categoryModel.getCategoryById(id)
-
-            if (!currentItem) {
-                return res.status(404).json({ success: false, message: 'Category not found.' })
-            }
-
-            // Recursively collect all subcategory images to delete from disk
-            const filesToDelete = []
-            if (currentItem.image_url) {
-                filesToDelete.push(currentItem.image_url)
-            }
-
-            const collectSubcategoryFiles = async (parentId) => {
-                const subs = await categoryModel.listCategories(parentId)
-                for (const sub of subs) {
-                    if (sub.image_url) {
-                        filesToDelete.push(sub.image_url)
-                    }
-                    await collectSubcategoryFiles(sub.id)
-                }
-            }
-            await collectSubcategoryFiles(id)
-
-            await categoryModel.deleteCategory(id)
-
-            // Delete all collected physical files from disk
-            for (const fileUrl of filesToDelete) {
-                await deletePhysicalFile(fileUrl)
-            }
-
-            return res.json({ success: true, message: 'Category deleted successfully.' })
-        } catch (err) {
-            console.error('[Category Controller Error]', err)
-            return res.status(500).json({ success: false, message: 'Server error deleting category.' })
-        }
+    const parentId = rawData.parent_id !== undefined ? rawData.parent_id : rawData.parentId;
+    if (parentId !== undefined && parentId !== null && parentId !== 'null' && parentId !== '') {
+      cleanData.parent_id = parseInt(parentId);
     }
-}
 
-module.exports = categoryController
+    let imageUrl = rawData.image_url || rawData.primary_image_url || rawData.photo || '';
+    if (req.file && req.file.path) imageUrl = req.file.path;
+    if (imageUrl) cleanData.image_url = imageUrl;
+
+    const result = await categoryModel.createCategory(cleanData, req.user?.id || 1);
+    res.status(201).json({ success: true, data: { id: result.insertId || result.id, ...cleanData } });
+  } catch (err) {
+    console.error('createCategory Error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const updateCategory = async (req, res) => {
+  try {
+    const id = req.params.id || req.body.id;
+    const rawData = { ...req.body };
+    const cleanData = {};
+
+    if (rawData.name) cleanData.name = rawData.name.trim();
+    if (rawData.description !== undefined) cleanData.description = rawData.description;
+
+    const parentId = rawData.parent_id !== undefined ? rawData.parent_id : rawData.parentId;
+    if (parentId !== undefined && parentId !== null && parentId !== 'null' && parentId !== '') {
+      cleanData.parent_id = parseInt(parentId);
+    } else if (rawData.parent_id === null || rawData.parentId === null) {
+      cleanData.parent_id = null;
+    }
+
+    if (rawData.primaryImageAction === 'remove') {
+      cleanData.image_url = '';
+    } else {
+      let imageUrl = rawData.image_url || rawData.primary_image_url || rawData.photo;
+      if (req.file && req.file.path) imageUrl = req.file.path;
+      if (imageUrl !== undefined) cleanData.image_url = imageUrl;
+    }
+
+    await categoryModel.updateCategory(id, cleanData, req.user?.id || 1);
+    res.json({ success: true, message: 'Category updated' });
+  } catch (err) {
+    console.error('updateCategory Error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const deleteCategory = async (req, res) => {
+  try {
+    const id = req.params.id || req.body.id;
+    await categoryModel.deleteCategory(id, req.user?.id || 1);
+    res.json({ success: true, message: 'Category deleted' });
+  } catch (err) {
+    console.error('deleteCategory Error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

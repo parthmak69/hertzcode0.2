@@ -70,6 +70,27 @@ export default function DataGrid({
                   </td>
                   {file.columns.filter((c) => c.isListCol !== false).map((col) => {
                     const val = item[col.name];
+                    const isImgCol = col.type === "file" || col.type === "image" || col.name.toLowerCase().includes("photo") || col.name.toLowerCase().includes("image") || col.name.toLowerCase().includes("pic") || col.name.toLowerCase().includes("avatar");
+                    const isImgVal = typeof val === "string" && (val.startsWith("/uploads/") || val.startsWith("http://") || val.startsWith("https://") || val.startsWith("data:image/"));
+
+                    if (isImgCol || isImgVal) {
+                      const src = val ? (val.startsWith("http") || val.startsWith("data:") ? val : `http://localhost:5001${val.startsWith("/") ? "" : "/"}${val}`) : "";
+                      return (
+                        <td key={col.id} style={{ padding: "8px 16px" }}>
+                          {src ? (
+                            <img
+                              src={src}
+                              alt={col.name}
+                              style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "6px", border: "1px solid var(--border-color)", backgroundColor: "#f3f4f6" }}
+                              onError={(e) => { e.target.onerror = null; e.target.style.display = "none"; }}
+                            />
+                          ) : (
+                            <span style={{ color: "var(--text-muted)", fontSize: "12px", fontStyle: "italic" }}>No Image</span>
+                          )}
+                        </td>
+                      );
+                    }
+
                     let displayVal = "";
                     if (val === null || val === undefined) {
                       displayVal = "NULL";

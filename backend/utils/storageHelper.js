@@ -1,6 +1,6 @@
-const fs = require('fs/promises')
-const path = require('path')
-const { dbQuery } = require('../config/db')
+import fs from 'fs/promises';
+import path from 'path';
+import { dbQuery } from '../config/db.js';
 
 async function getDirectorySize(dirPath) {
     let totalSize = 0
@@ -105,7 +105,7 @@ async function deletePhysicalFile(relativeUrl) {
     }
 }
 
-module.exports = {
+export {
     getStorageStatus,
     deletePhysicalFile
-}
+};

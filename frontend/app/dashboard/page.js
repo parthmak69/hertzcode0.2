@@ -14,6 +14,7 @@ const QUICK_TABLE_OPTIONS = [
   { id: "blog_category", name: "blog_category" },
   { id: "blog_comments", name: "blog_comments" },
   { id: "cart", name: "cart" },
+  { id: "categories", name: "categories" },
   { id: "contents", name: "contents" },
   { id: "customer", name: "customer" },
   { id: "faq", name: "faq" },
@@ -242,6 +243,10 @@ export default function DatabaseListPage() {
                       activeTab={activeTab}
                       onNavigate={() => router.push(`/dashboard/db/${db.name}`)}
                       onDelete={confirmDeleteDatabase}
+                      onAddQuickTables={(dbName) => {
+                        setNewDbName(dbName);
+                        setIsDbModalOpen(true);
+                      }}
                     />
                   ))
                 )}

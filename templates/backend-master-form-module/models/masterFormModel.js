@@ -1,4 +1,4 @@
-const { dbQuery } = require('../config/db')
+import { dbQuery } from '../config/db.js';
 
 const masterFormModel = {
     async getRecordById(id, category, executingUserId) {
@@ -122,4 +122,5 @@ const masterFormModel = {
     }
 }
 
-module.exports = masterFormModel
+export default masterFormModel
+

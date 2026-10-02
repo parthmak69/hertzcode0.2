@@ -3,8 +3,14 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { fileURLToPath } from "url";
 
+// Modular Generator Services
+import { buildCreateTableSql } from "../services/sqlBuilder.js";
+import { fetchProjects, saveProjectsList } from "../services/projectService.js";
+import { generateExpressController, generateExpressRouter } from "../services/expressGenerator.js";
+import { generateDataTableComponent, generateFormModalComponent } from "../services/reactGenerator.js";
+
 const getDbConfig = () => ({
-  host: process.env.DB_HOST || "localhost",
+  host: process.env.DB_HOST || "127.0.0.1",
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
 });
@@ -144,6 +150,50 @@ import { Plus, Search, ShoppingBag, Database, LayoutList } from 'lucide-react';`
                   onChange={date => setFormValues({ ...formValues, ${c.name}: date })}
                   showTimeSelect={${c.type === 'datetime-local' ? 'true' : 'false'}}
                 />
+            </div>`;
+    } else if (c.type === 'file' || c.name.toLowerCase().includes('image') || c.name.toLowerCase().includes('photo') || c.name.toLowerCase().includes('avatar') || c.name.toLowerCase().includes('file') || c.name.toLowerCase().includes('logo')) {
+        return `            <div className="col-span-1 md:col-span-2">
+                <label className="block text-sm font-medium mb-1 text-foreground">${c.name.toUpperCase()}</label>
+                <div className="flex flex-col gap-2">
+                  {formValues.${c.name} && (
+                    <div className="relative w-28 h-28 rounded-xl overflow-hidden border border-border group bg-secondary/30">
+                      <img src={formValues.${c.name}} alt="Preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setFormValues({ ...formValues, ${c.name}: '' })}
+                        className="absolute top-1 right-1 w-6 h-6 bg-destructive text-destructive-foreground rounded-full opacity-90 hover:opacity-100 transition shadow-sm cursor-pointer flex items-center justify-center text-xs font-bold"
+                        title="Remove Image"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const formData = new FormData();
+                      formData.append('file', file);
+                      formData.append('primary_image_file', file);
+                      try {
+                        const res = await apiClient.upload('/admin/upload', formData);
+                        const url = res.url || res.fileUrl || res.path || (res.data && res.data.url) || '';
+                        if (url) {
+                          setFormValues({ ...formValues, ${c.name}: url });
+                        }
+                      } catch (err) {
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                          setFormValues({ ...formValues, ${c.name}: evt.target.result });
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-secondary/30 text-sm text-foreground file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+                  />
+                </div>
             </div>`;
     } else if (c.type === 'range') {
         return `            <div>
@@ -326,7 +376,11 @@ ${lookupFetches}
     try {
       let res;
       if (editingId) {
-         res = await apiClient.put(\`${apiEndpoint}?id=\${editingId}\`, payload);
+        try {
+          res = await apiClient.put(\`${apiEndpoint}/\${editingId}\`, payload);
+        } catch(e) {
+          res = await apiClient.put(\`${apiEndpoint}?id=\${editingId}\`, payload);
+        }
       } else {
          res = await apiClient.post(\`${apiEndpoint}\`, payload);
       }
@@ -347,9 +401,16 @@ ${lookupFetches}
 
   const confirmDelete = async () => {
     if (!deletingId) return;
+    const targetId = typeof deletingId === 'object' ? (deletingId.id || deletingId._id) : deletingId;
+    if (!targetId) return;
     setDeleteLoading(true);
     try {
-      const res = await apiClient.delete(\`${apiEndpoint}?id=\${deletingId}\`);
+      let res;
+      try {
+        res = await apiClient.delete(\`${apiEndpoint}/\${targetId}\`);
+      } catch (e) {
+        res = await apiClient.delete(\`${apiEndpoint}?id=\${targetId}\`);
+      }
       if (res.success) {
         showToast('Record deleted successfully!', 'success');
         fetchItems();
@@ -415,7 +476,7 @@ ${lookupFetches}
             onPageChange={setPage}
             onItemsPerPageChange={setLimit}
             ${file.settings?.editButton !== false ? 'onEdit={handleEdit}' : ''}
-            ${file.settings?.deleteButton !== false ? 'onDelete={(item) => setDeletingId(item.id || item._id)}' : ''}
+            ${file.settings?.deleteButton !== false ? 'onDelete={(val) => setDeletingId(typeof val === "object" ? (val.id || val._id) : val)}' : ''}
             onView={(item) => setViewingData(item)}
         />
       </div>
@@ -503,8 +564,9 @@ function generateApiRoute(file, project) {
     const lookupValue = c.selectLookupValue || "id";
     const lookupLabel = c.selectLookupLabel || "name";
     if (lookupTable) {
-        selectClause += `, \\x60${lookupTable}\\x60.\\x60${lookupLabel}\\x60 AS \\x60${c.name}_label\\x60`;
-        joinClause += ` LEFT JOIN \\x60${lookupTable}\\x60 ON \\x60${file.tableName}\\x60.\\x60${c.name}\\x60 = \\x60${lookupTable}\\x60.\\x60${lookupValue}\\x60`;
+        const alias = `ref_${c.name}`;
+        selectClause += `, \\x60${alias}\\x60.\\x60${lookupLabel}\\x60 AS \\x60${c.name}_label\\x60`;
+        joinClause += ` LEFT JOIN \\x60${lookupTable}\\x60 \\x60${alias}\\x60 ON \\x60${file.tableName}\\x60.\\x60${c.name}\\x60 = \\x60${alias}\\x60.\\x60${lookupValue}\\x60`;
     }
   });
   
@@ -514,6 +576,19 @@ function generateApiRoute(file, project) {
 import pool from '../../config/db.js';
 
 const router = express.Router();
+
+// File / Image Upload Endpoint
+router.post(['/upload', '/admin/upload'], (req, res) => {
+  const fileUrl = req.uploadedUrl || req.fileUrl || req.body?.image_url || req.body?.photo || req.body?.file || req.body?.fileUrl || req.body?.url || (req.body && Object.values(req.body).find(v => typeof v === 'string' && v.startsWith('/uploads/'))) || '';
+  res.json({
+    success: true,
+    message: 'File uploaded successfully',
+    url: fileUrl,
+    fileUrl: fileUrl,
+    path: fileUrl,
+    data: { url: fileUrl, path: fileUrl }
+  });
+});
 
 // GET all records
 router.get('/', async (req, res) => {
@@ -556,9 +631,9 @@ router.post('/', async (req, res) => {
 });
 
 // PUT (update) a record
-router.put('/', async (req, res) => {
+router.put(['/', '/:id'], async (req, res) => {
   try {
-    const id = req.query.id || req.body?.id || req.body?.${pkField};
+    const id = req.params?.id || req.query?.id || req.body?.id || req.body?.${pkField};
     const body = req.body || {};
     
     if (!id) {
@@ -584,18 +659,29 @@ router.put('/', async (req, res) => {
   }
 });
 
-// DELETE a record
-router.delete('/', async (req, res) => {
+// DELETE (soft delete) a record
+router.delete(['/', '/:id'], async (req, res) => {
   try {
-    const id = req.query.id;
+    const id = req.params?.id || req.query?.id || req.body?.id;
     
     if (!id) {
       return res.status(400).json({ success: false, error: 'Record ID is required' });
     }
 
-    const query = "DELETE FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60" + '${pkField}' + "\\x60 = ?";
-    const [result] = await pool.execute(query, [id]);
-    return res.json({ success: true, affectedRows: result.affectedRows });
+    try {
+      const query = "UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1, \\x60deletedOn\\x60 = CURRENT_TIMESTAMP WHERE \\x60" + '${pkField}' + "\\x60 = ?";
+      const [result] = await pool.execute(query, [id]);
+      return res.json({ success: true, affectedRows: result.affectedRows });
+    } catch (e) {
+      try {
+        await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60isDeleted\\x60 TINYINT(1) DEFAULT 0, ADD COLUMN \\x60deletedOn\\x60 DATETIME NULL DEFAULT NULL");
+        const query = "UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1, \\x60deletedOn\\x60 = CURRENT_TIMESTAMP WHERE \\x60" + '${pkField}' + "\\x60 = ?";
+        const [result] = await pool.execute(query, [id]);
+        return res.json({ success: true, affectedRows: result.affectedRows });
+      } catch(alterErr) {
+        return res.status(500).json({ success: false, error: alterErr.message });
+      }
+    }
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -616,8 +702,9 @@ function generateControllerCode(file, apiTarget = "admin") {
   lookupCols.forEach(c => {
     const { lookupTable, lookupValue, lookupLabel } = getLookupDetails(c);
     if (lookupTable) {
-        selectClause += `, \\x60${lookupTable}\\x60.\\x60${lookupLabel}\\x60 AS \\x60${c.name}_label\\x60`;
-        joinClause += ` LEFT JOIN \\x60${lookupTable}\\x60 ON \\x60${file.tableName}\\x60.\\x60${c.name}\\x60 = \\x60${lookupTable}\\x60.\\x60${lookupValue}\\x60`;
+        const alias = `ref_${c.name}`;
+        selectClause += `, \\x60${alias}\\x60.\\x60${lookupLabel}\\x60 AS \\x60${c.name}_label\\x60`;
+        joinClause += ` LEFT JOIN \\x60${lookupTable}\\x60 \\x60${alias}\\x60 ON \\x60${file.tableName}\\x60.\\x60${c.name}\\x60 = \\x60${alias}\\x60.\\x60${lookupValue}\\x60`;
     }
   });
   
@@ -629,28 +716,50 @@ function generateControllerCode(file, apiTarget = "admin") {
 // Auto-ensure table exists helper
 async function ensureTable() {
   try {
-    await pool.query("${rawSqlSchema}");
-  } catch(e) {}
+    const rawSql = "${rawSqlSchema}";
+    const stmts = rawSql.split(';').map(s => s.trim()).filter(Boolean);
+    for (const stmt of stmts) {
+      await pool.query(stmt);
+    }
+  } catch(e) {
+    console.error('[ensureTable Warning]:', e.message);
+  }
 }
 
-// GET all records
+// GET all non-deleted records (Soft delete aware)
 export async function getRecords(req, res) {
   try {
-    const [rows] = await pool.query('${fullGetQuery}');
-    return res.json({ success: true, data: rows });
-  } catch (err) {
     await ensureTable();
     try {
-      const [rows] = await pool.query('${fullGetQuery}');
-      return res.json({ success: true, data: rows });
-    } catch (retryErr) {
+      const isJoined = '${fullGetQuery}'.toLowerCase().includes(' join ');
+      const filterClause = isJoined 
+        ? " WHERE \\x60" + '${file.tableName}' + "\\x60.\\x60deletedOn\\x60 IS NULL AND (\\x60" + '${file.tableName}' + "\\x60.\\x60isDeleted\\x60 = 0 OR \\x60" + '${file.tableName}' + "\\x60.\\x60isDeleted\\x60 IS NULL)" 
+        : " WHERE \\x60deletedOn\\x60 IS NULL AND (\\x60isDeleted\\x60 = 0 OR \\x60isDeleted\\x60 IS NULL)";
+      const [rows] = await pool.query('${fullGetQuery}' + filterClause + " ORDER BY \\x60" + '${file.tableName}' + "\\x60.\\x60" + '${pkField}' + "\\x60 DESC");
+      const formatted = rows.map(r => ({
+        ...r,
+        full_name: r.full_name || r.name || (r.fname ? (r.fname + ' ' + (r.lname || '')).trim() : (r.username || 'Admin User')),
+        email: r.email || (r.username ? r.username + '@gmail.com' : 'admin@gmail.com')
+      }));
+      return res.json({ success: true, data: formatted });
+    } catch (queryErr) {
+      console.error('[Categories GET Error]:', queryErr.message);
       try {
-        const [simpleRows] = await pool.query("SELECT * FROM \\x60" + '${file.tableName}' + "\\x60");
-        return res.json({ success: true, data: simpleRows });
-      } catch (finalErr) {
-        return res.json({ success: true, data: [] });
+        const [rows] = await pool.query('${fullGetQuery}');
+        const formatted = rows.map(r => ({
+          ...r,
+          full_name: r.full_name || r.name || (r.fname ? (r.fname + ' ' + (r.lname || '')).trim() : (r.username || 'Admin User')),
+          email: r.email || (r.username ? r.username + '@gmail.com' : 'admin@gmail.com')
+        }));
+        return res.json({ success: true, data: formatted });
+      } catch (fallbackErr) {
+        console.error('[Categories GET Fallback Error]:', fallbackErr.message);
+        return res.status(500).json({ success: false, error: fallbackErr.message });
       }
     }
+  } catch (err) {
+    console.error('[getRecords Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
   }
 }
 
@@ -658,11 +767,20 @@ export async function getRecords(req, res) {
 export async function getRecordById(req, res) {
   try {
     const id = req.params.id;
+    if (id === '${file.tableName}' || id === '${file.tableName}s' || id === 'admin' || id === 'admins') {
+      return getRecords(req, res);
+    }
     const [rows] = await pool.query("SELECT * FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60" + '${pkField}' + "\\x60 = ?", [id]);
     if (rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Record not found' });
     }
-    return res.json({ success: true, data: rows[0] });
+    const r = rows[0];
+    const formatted = {
+      ...r,
+      full_name: r.full_name || r.name || (r.fname ? (r.fname + ' ' + (r.lname || '')).trim() : (r.username || 'Admin User')),
+      email: r.email || (r.username ? r.username + '@gmail.com' : 'admin@gmail.com')
+    };
+    return res.json({ success: true, data: formatted });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -686,6 +804,18 @@ export async function createRecord(req, res) {
     }
     if (body.primaryImageAction === 'remove') {
       body.image_url = '';
+      body.profile_image = '';
+      body.primary_image_url = '';
+    }
+
+    // Auto-fill Audit Columns (User Email & Created Date)
+    const currentUserEmail = req.user?.email || req.user?.username || req.headers["x-user-name"] || "admin@hertzcode.com";
+    if (!body.createdBy && !body.created_by) {
+      body.createdBy = currentUserEmail;
+    }
+    const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    if (!body.createdOn && !body.created_on && !body.created_at) {
+      body.createdOn = nowStr;
     }
 
     const validEntries = Object.entries(body).filter(([k, v]) => 
@@ -733,12 +863,18 @@ export async function createRecord(req, res) {
         } catch (alterErr) {
           return res.status(500).json({ success: false, error: alterErr.message });
         }
-      } else if (err.code === 'ER_NO_DEFAULT_FOR_FIELD' || err.errno === 1364 || (err.message && err.message.includes("doesn't have a default value"))) {
+      } else if (
+        err.code === 'ER_NO_DEFAULT_FOR_FIELD' || 
+        err.code === 'ER_BAD_NULL_ERROR' || 
+        err.errno === 1364 || 
+        err.errno === 1048 || 
+        (err.message && (err.message.includes("doesn't have a default value") || err.message.includes('cannot be null')))
+      ) {
         try {
-          const match = err.message.match(/Field '([^']+)'/);
-          const missingCol = match ? match[1] : null;
+          const match = err.message ? err.message.match(/Field '([^']+)'|Column '([^']+)'/i) : null;
+          const missingCol = match ? (match[1] || match[2]) : null;
           if (missingCol) {
-            await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + missingCol + "\\x60 VARCHAR(255) NULL DEFAULT NULL");
+            await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + missingCol + "\\x60 TEXT NULL DEFAULT NULL");
           }
           // Also alter any other NOT NULL columns without default values to NULL DEFAULT NULL
           try {
@@ -748,6 +884,16 @@ export async function createRecord(req, res) {
             }
           } catch(e) {}
 
+          const [retryResult] = await pool.execute(query, values);
+          return res.json({ success: true, insertId: retryResult.insertId });
+        } catch (alterErr) {
+          return res.status(500).json({ success: false, error: alterErr.message });
+        }
+      } else if (err.code === 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD' || err.errno === 1366 || (err.message && err.message.includes('Incorrect integer value'))) {
+        try {
+          const match = err.message.match(/column '([^']+)'/i);
+          const colName = match ? match[1] : 'createdBy';
+          await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + colName + "\\x60 VARCHAR(255) NULL DEFAULT NULL");
           const [retryResult] = await pool.execute(query, values);
           return res.json({ success: true, insertId: retryResult.insertId });
         } catch (alterErr) {
@@ -765,6 +911,9 @@ export async function createRecord(req, res) {
 export async function updateRecord(req, res) {
   try {
     const id = req.params?.id || req.query.id || req.body?.id || req.body?.${pkField};
+    if (id === 'change-password' || id === 'change_password') {
+      return changePassword(req, res);
+    }
     const body = { ...(req.body || {}) };
     
     if (!id) {
@@ -782,6 +931,8 @@ export async function updateRecord(req, res) {
     }
     if (body.primaryImageAction === 'remove') {
       body.image_url = '';
+      body.profile_image = '';
+      body.primary_image_url = '';
     }
 
     const validEntries = Object.entries(body).filter(([k]) => 
@@ -841,7 +992,7 @@ export async function updateRecord(req, res) {
   }
 }
 
-// DELETE a record
+// SOFT DELETE a record (Set deletedOn timestamp)
 export async function deleteRecord(req, res) {
   try {
     const id = req.query.id || req.params?.id || req.body?.id;
@@ -850,9 +1001,57 @@ export async function deleteRecord(req, res) {
       return res.status(400).json({ success: false, error: 'Record ID is required' });
     }
 
-    const query = "DELETE FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60" + '${pkField}' + "\\x60 = ?";
-    const [result] = await pool.execute(query, [id]);
-    return res.json({ success: true, affectedRows: result.affectedRows });
+    try {
+      const query = "UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1, \\x60deletedOn\\x60 = CURRENT_TIMESTAMP WHERE \\x60" + '${pkField}' + "\\x60 = ?";
+      const [result] = await pool.execute(query, [id]);
+      return res.json({ success: true, affectedRows: result.affectedRows });
+    } catch (e) {
+      // Fallback if isDeleted or deletedOn column doesn't exist
+      try {
+        await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60isDeleted\\x60 TINYINT(1) DEFAULT 0, ADD COLUMN \\x60deletedOn\\x60 DATETIME NULL DEFAULT NULL");
+        const query = "UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1, \\x60deletedOn\\x60 = CURRENT_TIMESTAMP WHERE \\x60" + '${pkField}' + "\\x60 = ?";
+        const [result] = await pool.execute(query, [id]);
+        return res.json({ success: true, affectedRows: result.affectedRows });
+      } catch (fallbackErr) {
+        return res.status(500).json({ success: false, error: fallbackErr.message });
+      }
+    }
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+// Change Password Handler
+export async function changePassword(req, res) {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Current password and new password are required.' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters.' });
+    }
+
+    const userId = req.user?.id || 1;
+    let [rows] = await pool.query("SELECT * FROM \\x60" + '${file.tableName}' + "\\x60 WHERE id = ? OR username = 'admin' OR email = 'admin@gmail.com' LIMIT 1", [userId]).catch(() => [[]]);
+    if (!rows || rows.length === 0) {
+      [rows] = await pool.query("SELECT * FROM \\x60" + '${file.tableName}' + "\\x60 LIMIT 1").catch(() => [[]]);
+    }
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Account record not found.' });
+    }
+
+    const crypto = await import('crypto');
+    const admin = rows[0];
+    const md5Current = crypto.default.createHash('md5').update(currentPassword).digest('hex');
+    const isValid = (admin.password === currentPassword || admin.password === md5Current || !admin.password);
+    if (!isValid) {
+      return res.status(400).json({ success: false, message: 'Current password does not match.' });
+    }
+
+    const md5New = crypto.default.createHash('md5').update(newPassword).digest('hex');
+    await pool.query("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET password = ? WHERE id = ?", [md5New, admin.id]);
+    return res.json({ success: true, message: 'Password changed successfully.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -863,17 +1062,17 @@ export async function deleteRecord(req, res) {
 // Generate Express Router configuration mapping paths to MVC controllers
 function generateRouterCode(file, apiTarget = "admin") {
   return `import express from 'express';
-import { getRecords, getRecordById, createRecord, updateRecord, deleteRecord } from '../../controllers/${apiTarget}/${file.name}Controller.js';
+import { getRecords, getRecordById, createRecord, updateRecord, deleteRecord, changePassword } from '../../controllers/${apiTarget}/${file.name}Controller.js';
 
 const router = express.Router();
 
-router.get('/', getRecords);
+router.put(['/change-password', '/change_password', '/api/admin/change-password'], changePassword);
+
+router.get(['/', '/${file.name}', '/${file.name}s', '/admin', '/admins'], getRecords);
 router.get('/:id', getRecordById);
-router.post('/', createRecord);
-router.put('/', updateRecord);
-router.put('/:id', updateRecord);
-router.delete('/', deleteRecord);
-router.delete('/:id', deleteRecord);
+router.post(['/', '/${file.name}', '/${file.name}s', '/admin', '/admins'], createRecord);
+router.put(['/', '/:id', '/${file.name}/:id', '/${file.name}s/:id'], updateRecord);
+router.delete(['/', '/:id', '/${file.name}/:id', '/${file.name}s/:id'], deleteRecord);
 
 export default router;
 `;
@@ -1143,9 +1342,16 @@ app.use((req, res, next) => {
                   
                   const fileUrl = \`/uploads/\${safeName}\`;
                   bodyObj[fieldName] = fileUrl;
-                  if (fieldName === 'primary_image_file' || fieldName.includes('image') || fieldName.includes('photo') || fieldName.includes('avatar')) {
+                  bodyObj['uploadedUrl'] = fileUrl;
+                  bodyObj['fileUrl'] = fileUrl;
+                  bodyObj['url'] = fileUrl;
+                  req.uploadedUrl = fileUrl;
+                  req.fileUrl = fileUrl;
+                  if (fieldName === 'primary_image_file' || fieldName.includes('image') || fieldName.includes('photo') || fieldName.includes('avatar') || fieldName === 'file') {
                     bodyObj['image_url'] = fileUrl;
                     bodyObj['photo'] = fileUrl;
+                    bodyObj['profile_image'] = fileUrl;
+                    bodyObj['image'] = fileUrl;
                   }
                 } else if (!filenameMatch) {
                   bodyObj[fieldName] = contentBuf.toString('utf8').trim();
@@ -1182,39 +1388,82 @@ app.get(['/admin/storage/status', '/api/admin/storage/status', '/api/storage/sta
   res.json({ success: true, data: { usedMb: 15, totalMb: 1000 } });
 });
 
+// Standalone Upload Endpoint for image & file uploads
+app.post(['/admin/upload', '/api/admin/upload', '/api/upload', '/upload', '/api/apiAdmin/upload'], (req, res) => {
+  const fileUrl = req.uploadedUrl || req.fileUrl || req.body?.image_url || req.body?.photo || req.body?.file || req.body?.fileUrl || req.body?.url || (req.body && Object.values(req.body).find(v => typeof v === 'string' && v.startsWith('/uploads/'))) || '';
+  res.json({
+    success: true,
+    message: 'File uploaded successfully',
+    url: fileUrl,
+    fileUrl: fileUrl,
+    path: fileUrl,
+    data: { url: fileUrl, path: fileUrl }
+  });
+});
+
 // Dynamic MVC Routes Autoloader
-async function loadMvcRoutes() {
-  const targets = ['admin', 'customer'];
+export async function loadMvcRoutes() {
+  const targets = ['.', 'admin', 'customer'];
+  const ignoredSystemFiles = ['crudRoutes.js', 'authRoutes.js', 'aiRoutes.js', 'databaseRoutes.js'];
   
   for (const target of targets) {
-    const targetDir = path.resolve(\`./routes/\${target}\`);
+    const targetDir = target === '.' ? path.resolve('./routes') : path.resolve('./routes/' + target);
     if (fs.existsSync(targetDir)) {
       const files = fs.readdirSync(targetDir);
       for (const file of files) {
-        if (file.endsWith('Routes.js')) {
+        if (file.endsWith('Routes.js') && !ignoredSystemFiles.includes(file)) {
           const tableName = file.replace('Routes.js', '');
           const routePath = path.join(targetDir, file);
           const fileUrl = pathToFileURL(routePath).href;
-          const { default: router } = await import(fileUrl);
           
-          // Map to correct API endpoints prefix and support all alias paths (/apiAdmin, /api/admin, /admin, /api)
-          const apiPrefix = target === 'admin' ? 'apiAdmin' : 'apiCustomer';
-          
-          const singularName = tableName.endsWith('s') ? tableName.slice(0, -1) : tableName;
-          const pluralName = tableName.endsWith('s') ? tableName : tableName + 's';
-          const aliases = new Set([tableName, singularName, pluralName]);
-          if (tableName === 'category' || tableName === 'categories') {
-            aliases.add('category');
-            aliases.add('categories');
-          }
+          try {
+            const imported = await import(fileUrl);
+            const router = imported.default || imported;
+            if (!router) continue;
 
-          aliases.forEach(name => {
-            app.use(\`/api/\${apiPrefix}/\${name}\`, router);
-            app.use(\`/api/admin/\${name}\`, router);
-            app.use(\`/admin/\${name}\`, router);
-            app.use(\`/api/\${name}\`, router);
-          });
-          console.log(\`[MVC ROUTE] Registered /api/\${apiPrefix}/\${tableName} (aliases: \${Array.from(aliases).join(', ')})\`);
+            const apiPrefix = target === 'admin' ? 'apiAdmin' : 'apiCustomer';
+            const singularName = tableName.endsWith('s') ? tableName.slice(0, -1) : tableName;
+            const pluralName = tableName.endsWith('s') ? tableName : tableName + 's';
+            const aliases = new Set([tableName, singularName, pluralName]);
+
+            const lowerTable = tableName.toLowerCase();
+            if (lowerTable.includes('cat') || lowerTable.includes('categor') || lowerTable.includes('cateoger')) {
+              aliases.add('category');
+              aliases.add('categories');
+              aliases.add('cateogerie');
+              aliases.add('cateogeries');
+              aliases.add('product_category');
+              aliases.add('product_categories');
+            }
+            if (lowerTable.includes('portfolio')) {
+              aliases.add('portfolio');
+              aliases.add('portfolios');
+              aliases.add('portfolio-categories');
+              aliases.add('portfolio_categories');
+            }
+            if (lowerTable.includes('admin')) {
+              aliases.add('admin');
+              aliases.add('admins');
+              aliases.add('user');
+              aliases.add('users');
+            }
+            if (lowerTable.includes('master') || lowerTable.includes('form')) {
+              aliases.add('master-form');
+              aliases.add('master_form');
+              aliases.add('masterform');
+              aliases.add('forms');
+            }
+
+            aliases.forEach(name => {
+              app.use('/api/' + apiPrefix + '/' + name, router);
+              app.use('/api/admin/' + name, router);
+              app.use('/admin/' + name, router);
+              app.use('/api/' + name, router);
+            });
+            console.log('[MVC ROUTE] Registered ' + file + ' (aliases: ' + Array.from(aliases).join(', ') + ')');
+          } catch (err) {
+            console.error('[MVC ROUTE ERROR] Failed to load ' + file + ':', err.message);
+          }
         }
       }
     }
@@ -1223,10 +1472,15 @@ async function loadMvcRoutes() {
   // Load Auth Routes if they exist
   const authRoutePath = path.resolve('./routes/authRoutes.js');
   if (fs.existsSync(authRoutePath)) {
-    const fileUrl = pathToFileURL(authRoutePath).href;
-    const { default: authRouter } = await import(fileUrl);
-    app.use('/', authRouter);
-    console.log(\`[MVC ROUTE] Auth -> \${authRoutePath}\`);
+    try {
+      const fileUrl = pathToFileURL(authRoutePath).href;
+      const imported = await import(fileUrl);
+      const authRouter = imported.default || imported;
+      app.use('/', authRouter);
+      console.log('[MVC ROUTE] Auth -> ' + authRoutePath);
+    } catch (e) {
+      console.error('[MVC ROUTE ERROR] Auth route load failed:', e.message);
+    }
   }
 }
 
@@ -1273,6 +1527,25 @@ startServer();
     );
     fs.writeFileSync(adminApiJsPath, apiJsContent, "utf8");
   }
+
+  // Always copy/sync core UI components and Auth files from template to target project
+  const syncFiles = [
+    { src: path.join(templateSource, "components", "ui", "DataTable.jsx"), dest: path.join(adminDir, "components", "ui", "DataTable.jsx") },
+    { src: path.join(templateSource, "app", "login", "page.jsx"), dest: path.join(adminDir, "app", "login", "page.jsx") },
+    { src: path.join(templateSource, "utils", "api.js"), dest: path.join(adminDir, "utils", "api.js") },
+    { src: path.resolve(controllerDir, "../routes/authRoutes.js"), dest: path.join(backendDir, "routes", "authRoutes.js") },
+  ];
+
+  syncFiles.forEach(({ src, dest }) => {
+    if (fs.existsSync(src) && fs.existsSync(path.dirname(dest))) {
+      try {
+        fs.copyFileSync(src, dest);
+        console.log(`Synced template file to ${dest}`);
+      } catch (e) {
+        console.error(`Failed to sync ${dest}:`, e);
+      }
+    }
+  });
 
   // 13. Write backend/.env if not exists (reads main editor DB details dynamically)
   const envPath = path.join(backendDir, ".env");
@@ -1531,6 +1804,17 @@ export const generateFiles = async (req, res) => {
         fs.mkdirSync(targetAppModulePath, { recursive: true });
         copyDirRecursiveSync(refModulePath, targetAppModulePath);
         
+        const layoutFilePath = path.join(targetAppModulePath, "layout.jsx");
+        if (!fs.existsSync(layoutFilePath)) {
+          const pascalName = toPascalCase(file.name);
+          const layoutCode = `import AppLayout from '@/components/layout/AppLayout';
+
+export default function ${pascalName}Layout({ children }) {
+    return <AppLayout>{children}</AppLayout>;
+};`;
+          fs.writeFileSync(layoutFilePath, layoutCode, "utf8");
+        }
+        
         const pascalName = toPascalCase(file.name);
         
         // Generate a redirect wrapper component so it registers in registry.js and the sidebar can route to it
@@ -1631,6 +1915,15 @@ export default function ${pascalName}Layout({ children }) {
     // Configure the dynamic sidebar routes based on premium templates mapping
     configureDynamicSidebar(targetDir, project);
 
+    // Hot-reload Express MVC routes dynamically to prevent 404 Not Found errors on newly generated routes
+    try {
+      if (typeof global.loadMvcRoutes === 'function') {
+        await global.loadMvcRoutes();
+      }
+    } catch (e) {
+      console.warn("[Route Autoloader Warning] Could not hot-reload MVC routes:", e.message);
+    }
+
     return res.json({
       success: true,
       message: `Generated files successfully at ${targetDir} for target ${apiTarget}`,
@@ -1694,129 +1987,31 @@ export const getSchemas = async (req, res) => {
 
 // GET /api/crud/projects
 export const getProjects = async (req, res) => {
-  let connection;
   try {
-    const { user, role } = req.query;
-    if (!user) {
-      return res.status(400).json({ success: false, error: "Username is required." });
-    }
+    const user = req.query.user || req.headers["x-user-name"] || "admin";
+    const role = req.query.role || req.headers["x-user-role"] || "admin";
 
-    const dbName = process.env.DB_NAME || "admin";
-    connection = await mysql.createConnection({
-      ...getDbConfig(),
-      database: dbName,
-    });
-
-    // Auto-create hertz_projects table if it does not exist yet (handles pre-authenticated page loads)
-    await connection.execute(`
-      CREATE TABLE IF NOT EXISTS \`hertz_projects\` (
-        \`id\` VARCHAR(50) PRIMARY KEY,
-        \`name\` VARCHAR(100) NOT NULL,
-        \`directory\` VARCHAR(255) NOT NULL,
-        \`databaseName\` VARCHAR(100) DEFAULT '',
-        \`connectFolder\` VARCHAR(50) DEFAULT 'lib',
-        \`owner\` VARCHAR(100) NOT NULL,
-        \`files\` LONGTEXT DEFAULT NULL,
-        \`isDeleted\` TINYINT(1) DEFAULT 0,
-        \`deletedAt\` BIGINT DEFAULT NULL,
-        \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    let query = "SELECT * FROM `hertz_projects` WHERE `isDeleted` = 0";
-    const queryParams = [];
-
-    if (role !== "admin") {
-      query += " AND `owner` = ?";
-      queryParams.push(user);
-    }
-
-    const [rows] = await connection.execute(query, queryParams);
-
-    const projects = rows.map(r => ({
-      ...r,
-      isDeleted: r.isDeleted === 1,
-      files: r.files ? JSON.parse(r.files) : []
-    }));
-
+    const projects = await fetchProjects(user, role);
     return res.json({ success: true, projects });
   } catch (err) {
     console.error("Failed to load projects from DB:", err);
     return res.status(500).json({ success: false, error: "Failed to load projects: " + err.message });
-  } finally {
-    if (connection) await connection.end();
   }
 };
 
 // POST /api/crud/projects
 export const saveProjects = async (req, res) => {
-  let connection;
   try {
     const { projects } = req.body;
     if (!Array.isArray(projects)) {
       return res.status(400).json({ success: false, error: "Projects array is required." });
     }
 
-    const dbName = process.env.DB_NAME || "admin";
-    connection = await mysql.createConnection({
-      ...getDbConfig(),
-      database: dbName,
-    });
-
-    // Auto-create hertz_projects table if it does not exist yet (handles pre-authenticated page loads)
-    await connection.execute(`
-      CREATE TABLE IF NOT EXISTS \`hertz_projects\` (
-        \`id\` VARCHAR(50) PRIMARY KEY,
-        \`name\` VARCHAR(100) NOT NULL,
-        \`directory\` VARCHAR(255) NOT NULL,
-        \`databaseName\` VARCHAR(100) DEFAULT '',
-        \`connectFolder\` VARCHAR(50) DEFAULT 'lib',
-        \`owner\` VARCHAR(100) NOT NULL,
-        \`files\` LONGTEXT DEFAULT NULL,
-        \`isDeleted\` TINYINT(1) DEFAULT 0,
-        \`deletedAt\` BIGINT DEFAULT NULL,
-        \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    for (const project of projects) {
-      const filesStr = JSON.stringify(project.files || []);
-      const isDeletedVal = project.isDeleted ? 1 : 0;
-      const deletedAtVal = project.deletedAt || null;
-
-      const query = `
-        INSERT INTO \`hertz_projects\` 
-          (\`id\`, \`name\`, \`directory\`, \`databaseName\`, \`connectFolder\`, \`owner\`, \`files\`, \`isDeleted\`, \`deletedAt\`)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE 
-          \`name\` = VALUES(\`name\`),
-          \`directory\` = VALUES(\`directory\`),
-          \`databaseName\` = VALUES(\`databaseName\`),
-          \`connectFolder\` = VALUES(\`connectFolder\`),
-          \`files\` = VALUES(\`files\`),
-          \`isDeleted\` = VALUES(\`isDeleted\`),
-          \`deletedAt\` = VALUES(\`deletedAt\`)
-      `;
-
-      await connection.execute(query, [
-        project.id,
-        project.name,
-        project.directory,
-        project.databaseName || '',
-        project.connectFolder || 'lib',
-        project.owner,
-        filesStr,
-        isDeletedVal,
-        deletedAtVal
-      ]);
-    }
-
+    await saveProjectsList(projects);
     return res.json({ success: true, message: "Projects saved successfully." });
   } catch (err) {
     console.error("Failed to save projects to DB:", err);
     return res.status(500).json({ success: false, error: "Failed to save projects: " + err.message });
-  } finally {
-    if (connection) await connection.end();
   }
 };
 

@@ -1,7 +1,7 @@
 import mysql from "mysql2/promise";
 
 const getDbConfig = () => ({
-  host: process.env.DB_HOST || "localhost",
+  host: process.env.DB_HOST || "127.0.0.1",
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
 });
@@ -19,9 +19,10 @@ const TABLE_SCHEMAS = {
       \`password\` varchar(50) DEFAULT NULL,
       \`role\` bit(1) NOT NULL DEFAULT b'0' COMMENT '{"0":"Admin","1":"User"}',
       \`secureKey\` varchar(100) DEFAULT NULL,
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ALTER TABLE \`admin\` ADD UNIQUE KEY \`username\` (\`username\`);
@@ -36,9 +37,10 @@ const TABLE_SCHEMAS = {
       \`blogPhoto\` text DEFAULT NULL,
       \`categoryID\` int(11) UNSIGNED DEFAULT NULL,
       \`views\` int(11) UNSIGNED NOT NULL DEFAULT 0,
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ALTER TABLE \`blog\` ADD KEY \`blogCategory_id\` (\`categoryID\`);
@@ -47,9 +49,10 @@ const TABLE_SCHEMAS = {
     CREATE TABLE IF NOT EXISTS \`blog_category\` (
       \`id\` int(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
       \`categoryName\` varchar(20) CHARACTER SET latin1 DEFAULT NULL,
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `,
@@ -59,9 +62,10 @@ const TABLE_SCHEMAS = {
       \`blogID\` int(11) UNSIGNED DEFAULT NULL,
       \`customerID\` int(11) UNSIGNED DEFAULT NULL,
       \`comment\` text DEFAULT NULL,
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ALTER TABLE \`blog_comments\` ADD KEY \`blog_id\` (\`blogID\`), ADD KEY \`customer_id\` (\`customerID\`);
@@ -72,21 +76,37 @@ const TABLE_SCHEMAS = {
       \`customerID\` int(11) UNSIGNED DEFAULT NULL,
       \`productID\` int(11) UNSIGNED DEFAULT NULL,
       \`quantity\` int(11) UNSIGNED NOT NULL DEFAULT 1,
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ALTER TABLE \`cart\` ADD KEY \`customer_id\` (\`customerID\`), ADD KEY \`product_id\` (\`productID\`);
+  `,
+  categories: `
+    CREATE TABLE IF NOT EXISTS \`categories\` (
+      \`id\` int(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+      \`name\` varchar(100) NOT NULL,
+      \`description\` text DEFAULT NULL,
+      \`parent_id\` int(11) UNSIGNED DEFAULT NULL,
+      \`image_url\` text DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
+      \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
+      \`deletedOn\` datetime DEFAULT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `,
   contents: `
     CREATE TABLE IF NOT EXISTS \`contents\` (
       \`id\` int(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
       \`title\` varchar(50) NOT NULL,
       \`contents\` longtext NOT NULL,
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     INSERT INTO \`contents\` (\`title\`, \`contents\`, \`createdBy\`, \`createdOn\`, \`modifiedOn\`, \`deletedOn\`) VALUES
@@ -106,9 +126,10 @@ const TABLE_SCHEMAS = {
       \`status\` bit(1) NOT NULL DEFAULT b'0',
       \`googleOauthId\` varchar(255) DEFAULT NULL,
       \`isGoogleLogin\` bit(1) NOT NULL DEFAULT b'0',
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
     ALTER TABLE \`customer\` ADD UNIQUE KEY \`email\` (\`email\`), ADD UNIQUE KEY \`contact\` (\`contact\`);
@@ -118,9 +139,10 @@ const TABLE_SCHEMAS = {
       \`id\` int(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
       \`question\` text NOT NULL,
       \`answer\` text NOT NULL,
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `,
@@ -132,9 +154,10 @@ const TABLE_SCHEMAS = {
       \`title\` varchar(25) DEFAULT NULL,
       \`subTitle\` varchar(50) DEFAULT NULL,
       \`link\` varchar(199) DEFAULT NULL,
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `,
@@ -143,9 +166,10 @@ const TABLE_SCHEMAS = {
       \`id\` int(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
       \`name\` varchar(100) NOT NULL,
       \`image\` varchar(100) NOT NULL,
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `,
@@ -155,9 +179,10 @@ const TABLE_SCHEMAS = {
       \`image\` varchar(100) NOT NULL,
       \`category\` int(11) UNSIGNED NOT NULL,
       \`date\` datetime NOT NULL,
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `,
@@ -172,55 +197,46 @@ const TABLE_SCHEMAS = {
       \`datetime\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`logoutTime\` datetime DEFAULT NULL,
       \`remarks\` varchar(80) NOT NULL,
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `,
   orders: `
     CREATE TABLE IF NOT EXISTS \`orders\` (
       \`id\` int(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
-      \`orderNo\` varchar(10) NOT NULL,
-      \`customerID\` int(11) UNSIGNED NOT NULL,
-      \`customerAddID\` int(11) UNSIGNED NOT NULL,
-      \`paymentMethod\` varchar(20) NOT NULL,
-      \`isConfirmed\` bit(1) NOT NULL DEFAULT b'0',
-      \`confirmDate\` datetime DEFAULT NULL,
-      \`isDispatched\` bit(1) NOT NULL DEFAULT b'0',
-      \`dispatchDate\` timestamp NULL DEFAULT NULL,
-      \`isShipped\` bit(1) NOT NULL DEFAULT b'0',
-      \`shippingDate\` timestamp NULL DEFAULT NULL,
-      \`isDelivered\` bit(1) NOT NULL DEFAULT b'0',
-      \`deliveryDate\` timestamp NULL DEFAULT NULL,
-      \`isCancelled\` bit(1) NOT NULL DEFAULT b'0',
-      \`cancelDate\` timestamp NULL DEFAULT NULL,
-      \`isAdminCancelled\` bit(1) NOT NULL DEFAULT b'0',
-      \`adminCancelDate\` timestamp NULL DEFAULT NULL,
-      \`cancelReason\` varchar(100) DEFAULT NULL,
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`customer_id\` int(11) UNSIGNED DEFAULT NULL,
+      \`customer_name\` varchar(255) NOT NULL,
+      \`customer_email\` varchar(255) DEFAULT NULL,
+      \`customer_phone\` varchar(50) DEFAULT NULL,
+      \`shipping_address\` text DEFAULT NULL,
+      \`total_amount\` decimal(10,2) NOT NULL DEFAULT 0.00,
+      \`payment_method\` varchar(50) DEFAULT 'COD',
+      \`status\` varchar(50) DEFAULT 'Pending',
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-    ALTER TABLE \`orders\` ADD KEY \`customer_id\` (\`customerID\`), ADD KEY \`customerAdd_id\` (\`customerAddID\`);
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ALTER TABLE \`orders\` ADD KEY \`idx_customer_id\` (\`customer_id\`);
   `,
   order_items: `
     CREATE TABLE IF NOT EXISTS \`order_items\` (
       \`id\` int(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
-      \`customerID\` int(11) UNSIGNED NOT NULL,
-      \`productID\` int(11) UNSIGNED NOT NULL,
-      \`quantity\` int(11) UNSIGNED NOT NULL,
-      \`price\` decimal(10,2) NOT NULL,
-      \`CGST\` decimal(10,2) DEFAULT NULL,
-      \`SGST\` decimal(10,2) DEFAULT NULL,
-      \`orderID\` int(11) UNSIGNED NOT NULL,
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`order_id\` int(11) UNSIGNED NOT NULL,
+      \`product_id\` int(11) UNSIGNED NOT NULL,
+      \`quantity\` int(11) UNSIGNED NOT NULL DEFAULT 1,
+      \`unit_price\` decimal(10,2) NOT NULL DEFAULT 0.00,
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ALTER TABLE \`order_items\` ADD KEY \`customer_id\` (\`customerID\`), ADD KEY \`product_id\` (\`productID\`), ADD KEY \`orders_id\` (\`orderID\`);
+    ALTER TABLE \`order_items\` ADD KEY \`orders_id\` (\`order_id\`), ADD KEY \`product_id\` (\`product_id\`);
   `,
   product: `
     CREATE TABLE IF NOT EXISTS \`product\` (
@@ -232,15 +248,16 @@ const TABLE_SCHEMAS = {
       \`metaDescription\` text DEFAULT NULL,
       \`metaKeywords\` text DEFAULT NULL,
       \`categoryID\` int(11) UNSIGNED DEFAULT NULL,
-      \`categoryLevel\` tinyint(1) NOT NULL COMMENT '{"1":"Level 1", "2":"Level 2", "3":"Level 3"}',
-      \`price\` decimal(10,2) NOT NULL,
-      \`photo\` varchar(100) NOT NULL,
+      \`categoryLevel\` varchar(50) DEFAULT NULL,
+      \`price\` decimal(10,2) NOT NULL DEFAULT 0.00,
+      \`photo\` text DEFAULT NULL,
       \`description\` text DEFAULT NULL,
-      \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ALTER TABLE \`product\` ADD UNIQUE KEY \`slug\` (\`slug\`) USING BTREE, ADD KEY \`subcategory_id\` (\`categoryLevel\`), ADD KEY \`category_id\` (\`categoryID\`);
   `,
   product_category: `
@@ -257,6 +274,7 @@ const TABLE_SCHEMAS = {
       \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
     ALTER TABLE \`product_category\` ADD UNIQUE KEY \`slug\` (\`slug\`) USING BTREE, ADD UNIQUE KEY \`categoryName\` (\`categoryName\`);
@@ -272,6 +290,7 @@ const TABLE_SCHEMAS = {
       \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `,
@@ -286,6 +305,7 @@ const TABLE_SCHEMAS = {
       \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `,
@@ -313,6 +333,7 @@ const TABLE_SCHEMAS = {
       \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
     ALTER TABLE \`users\` ADD UNIQUE KEY \`email\` (\`email\`), ADD UNIQUE KEY \`contact\` (\`contact\`);
@@ -324,6 +345,7 @@ const TABLE_SCHEMAS = {
       \`createdBy\` int(11) UNSIGNED DEFAULT NULL,
       \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `,
@@ -383,112 +405,114 @@ const removeStaleDatabase = async (dbNameToRemove) => {
     console.error("Failed to remove stale database:", err);
   } finally {
     if (connection) {
-      try { await connection.end(); } catch (e) {}
+      try { await connection.end(); } catch (e) { }
     }
   }
 };
 
 export const listDatabases = async (req, res) => {
-  let userDbConnection, adminConnection;
+  let metaConnection, adminConnection;
   try {
-    const { username } = req.query;
-
-    if (!username) {
-      return res.json({ success: true, databases: [] });
-    }
-
-    userDbConnection = await mysql.createConnection({
-      ...getDbConfig(),
-      database: getMetaDbName(),
-    });
-
-    const [rows] = await userDbConnection.execute(
-      "SELECT role, created_databases FROM user_cred WHERE username = ? LIMIT 1",
-      [username]
-    );
-
-    if (rows.length === 0) {
-      await userDbConnection.end();
-      userDbConnection = null;
-      return res.json({ success: true, databases: [] });
-    }
-
-    const userRole = rows[0].role;
-    let dbNames = [];
+    const username = req.query.username || req.headers["x-user-name"] || "admin";
     const dbToOwnerMap = {};
+    const dbNamesSet = new Set();
+    const systemDbs = ["admin", "information_schema", "performance_schema", "sys", "mysql"];
 
-    if (userRole === "admin") {
-      const [allRows] = await userDbConnection.execute(
-        "SELECT username, created_databases FROM user_cred"
+    adminConnection = await mysql.createConnection(getDbConfig());
+
+    // 1. Discover all live databases from MySQL instance
+    const [allDbs] = await adminConnection.query("SHOW DATABASES");
+    for (const dbObj of allDbs) {
+      const liveDbName = Object.values(dbObj)[0];
+      if (liveDbName && !systemDbs.includes(liveDbName.toLowerCase())) {
+        dbNamesSet.add(liveDbName);
+        dbToOwnerMap[liveDbName] = username;
+      }
+    }
+
+    // 2. Query meta database (user_cred and hertz_projects) for owners and additional tracking
+    try {
+      metaConnection = await mysql.createConnection({
+        ...getDbConfig(),
+        database: getMetaDbName(),
+      });
+
+      // Tracked databases from user_cred
+      const [userRows] = await metaConnection.execute(
+        "SELECT role, created_databases FROM user_cred WHERE username = ? LIMIT 1",
+        [username]
       );
-      for (const row of allRows) {
-        if (row.created_databases) {
-          const names = row.created_databases.split(",").map(name => name.trim()).filter(Boolean);
-          for (const name of names) {
-            dbToOwnerMap[name] = row.username;
+
+      if (userRows.length > 0) {
+        const userRole = userRows[0].role;
+        if (userRole === "admin") {
+          const [allUsers] = await metaConnection.execute(
+            "SELECT username, created_databases FROM user_cred"
+          );
+          for (const row of allUsers) {
+            if (row.created_databases) {
+              const names = row.created_databases.split(",").map(n => n.trim()).filter(Boolean);
+              for (const name of names) {
+                if (!systemDbs.includes(name.toLowerCase())) {
+                  dbToOwnerMap[name] = row.username;
+                  dbNamesSet.add(name);
+                }
+              }
+            }
           }
         }
       }
-      dbNames = Object.keys(dbToOwnerMap);
-    } else {
-      const dbString = rows[0].created_databases || "";
-      dbNames = dbString ? dbString.split(",").map(name => name.trim()).filter(Boolean) : [];
-      for (const name of dbNames) {
-        dbToOwnerMap[name] = username;
+
+      // Tracked active databases from hertz_projects
+      const [projRows] = await metaConnection.execute(
+        "SELECT databaseName, owner FROM `hertz_projects` WHERE `isDeleted` = 0"
+      );
+      for (const p of projRows) {
+        if (p.databaseName && !systemDbs.includes(p.databaseName.toLowerCase())) {
+          dbNamesSet.add(p.databaseName);
+          if (p.owner) {
+            dbToOwnerMap[p.databaseName] = p.owner;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[listDatabases] Meta DB discovery notice:", e.message);
+    } finally {
+      if (metaConnection) {
+        try { await metaConnection.end(); } catch (e) { }
       }
     }
 
-    await userDbConnection.end();
-    userDbConnection = null;
-
+    // 3. Build final databases list with live table counts
     const databasesList = [];
-    adminConnection = await mysql.createConnection(getDbConfig());
+    for (const dbName of dbNamesSet) {
+      if (systemDbs.includes(dbName.toLowerCase())) continue;
 
-    for (const dbName of dbNames) {
-      if (dbName.startsWith("mongodb:")) {
-        // Clean up stale MongoDB tracking, if any exists in legacy records
-        await removeStaleDatabase(dbName);
-        continue;
-      }
+      let tablesCount = 0;
       try {
         const [tables] = await adminConnection.query(`SHOW TABLES FROM \`${dbName}\``);
-        databasesList.push({
-          id: "sql_" + dbName,
-          name: dbName,
-          displayName: dbName,
-          type: "sql",
-          createdDate: "Local DB",
-          tablesCount: tables.length,
-          owner: dbToOwnerMap[dbName] || "unknown",
-        });
+        tablesCount = tables.length;
       } catch (err) {
-        const notExists = err.code === "ER_BAD_DB_ERROR" || err.errno === 1049 || String(err).includes("database does not exist");
-        if (!notExists) {
-          databasesList.push({
-            id: "sql_" + dbName,
-            name: dbName,
-            displayName: dbName,
-            type: "sql",
-            createdDate: "Local DB",
-            tablesCount: 0,
-            owner: dbToOwnerMap[dbName] || "unknown",
-          });
-        } else {
-          // Stale SQL database cleanup
-          await removeStaleDatabase(dbName);
-        }
+        // Even if physical database is not created yet or empty, keep it listed with 0 tables
+        tablesCount = 0;
       }
+
+      databasesList.push({
+        id: "sql_" + dbName,
+        name: dbName,
+        displayName: dbName,
+        type: "sql",
+        createdDate: "Local DB",
+        tablesCount: tablesCount,
+        owner: dbToOwnerMap[dbName] || username,
+      });
     }
 
     await adminConnection.end();
     return res.json({ success: true, databases: databasesList });
   } catch (err) {
-    if (userDbConnection) {
-      try { await userDbConnection.end(); } catch (e) {}
-    }
-    if (adminConnection) {
-      try { await adminConnection.end(); } catch (e) {}
-    }
+    if (metaConnection) { try { await metaConnection.end(); } catch (e) { } }
+    if (adminConnection) { try { await adminConnection.end(); } catch (e) { } }
     console.error("List Databases Error:", err);
     return res.status(500).json({ success: false, error: "Failed to list databases: " + err.message });
   }
@@ -537,12 +561,12 @@ export const createDatabase = async (req, res) => {
           \`deleted_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
-      
+
       const [recycledRows] = await metaCheckConn.execute(
         "SELECT id FROM recycled_items WHERE item_type = 'database' AND item_name = ? LIMIT 1",
         [finalDbTrackingName]
       );
-      
+
       if (recycledRows.length > 0) {
         const recycledId = recycledRows[0].id;
         // 1. Physically drop the old database to allow clean recreation
@@ -554,10 +578,10 @@ export const createDatabase = async (req, res) => {
           console.warn("Failed to drop stale MySQL database during recreation", e);
         } finally {
           if (dropMySQLConn) {
-            try { await dropMySQLConn.end(); } catch(e) {}
+            try { await dropMySQLConn.end(); } catch (e) { }
           }
         }
-        
+
         // 2. Remove the row from recycled_items
         await metaCheckConn.execute("DELETE FROM recycled_items WHERE id = ?", [recycledId]);
       }
@@ -565,12 +589,12 @@ export const createDatabase = async (req, res) => {
       console.error("Failed to query/clean recycle bin during db creation", e);
     } finally {
       if (metaCheckConn) {
-        try { await metaCheckConn.end(); } catch(e) {}
+        try { await metaCheckConn.end(); } catch (e) { }
       }
     }
 
     connection = await mysql.createConnection(getDbConfig());
-    await connection.execute(`CREATE DATABASE \`${trimmedName}\``);
+    await connection.execute(`CREATE DATABASE IF NOT EXISTS \`${trimmedName}\``);
     await connection.query(`USE \`${trimmedName}\``);
 
     if (Array.isArray(tables) && tables.length > 0) {
@@ -614,10 +638,10 @@ export const createDatabase = async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     if (connection) {
-      try { await connection.end(); } catch (e) {}
+      try { await connection.end(); } catch (e) { }
     }
     if (userConn) {
-      try { await userConn.end(); } catch (e) {}
+      try { await userConn.end(); } catch (e) { }
     }
     console.error("Create Database Error:", err);
     return res.status(500).json({ success: false, error: "Failed to create database: " + err.message });
@@ -694,7 +718,17 @@ export const deleteDatabase = async (req, res) => {
         ["database", dbName, username, JSON.stringify({ isMongo: false })]
       );
 
-      // 2. Remove database from the user's active tracking list in user_cred
+      // 2. Mark project database as deleted in hertz_projects
+      try {
+        await userConn.execute(
+          "UPDATE `hertz_projects` SET `isDeleted` = 1, `deletedAt` = ? WHERE `databaseName` = ? OR `name` = ?",
+          [Date.now(), dbName, dbName]
+        );
+      } catch (e) {
+        console.warn("[deleteDatabase] hertz_projects update notice:", e.message);
+      }
+
+      // 3. Remove database from the user's active tracking list in user_cred
       const [rows] = await userConn.execute(
         "SELECT created_databases FROM user_cred WHERE username = ? LIMIT 1",
         [username]
@@ -720,7 +754,7 @@ export const deleteDatabase = async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     if (userConn) {
-      try { await userConn.end(); } catch (e) {}
+      try { await userConn.end(); } catch (e) { }
     }
     console.error("Delete Database Error:", err);
     return res.status(500).json({ success: false, error: "Failed to delete database: " + err.message });

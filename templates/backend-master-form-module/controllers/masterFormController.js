@@ -1,6 +1,6 @@
-const masterFormModel = require('../models/masterFormModel')
-const { hashPassword } = require('../utils/authHelper')
-const { deletePhysicalFile } = require('../utils/storageHelper')
+import masterFormModel from '../models/masterFormModel.js';
+import { hashPassword } from '../utils/authHelper.js';
+import { deletePhysicalFile } from '../utils/storageHelper.js';
 
 // Helpers for Wildcard CRUD routes
 function mapEndpointToCategory(endpoint) {
@@ -503,4 +503,6 @@ const masterFormController = {
     }
 }
 
-module.exports = masterFormController
+export default masterFormController;
+
+

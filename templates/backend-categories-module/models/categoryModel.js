@@ -1,63 +1,54 @@
-const { dbQuery } = require('../config/db')
+import { dbQuery } from '../config/db.js';
 
-const categoryModel = {
-    async listCategories(parentId) {
-        if (parentId === 'all') {
-            return await dbQuery('SELECT * FROM categories ORDER BY name ASC')
-        }
-        const sql = (parentId === null || parentId === 'null' || parentId === undefined || parentId === '')
-            ? 'SELECT * FROM categories WHERE parent_id IS NULL ORDER BY name ASC'
-            : 'SELECT * FROM categories WHERE parent_id = ? ORDER BY name ASC'
-        const params = (parentId === null || parentId === 'null' || parentId === undefined || parentId === '') ? [] : [parentId]
-        return await dbQuery(sql, params)
-    },
+export const ensureCategoriesTable = async (executingUserId) => {
+  try {
+    await dbQuery(`
+      CREATE TABLE IF NOT EXISTS \`categories\` (
+        \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+        \`name\` VARCHAR(255) NOT NULL,
+        \`description\` TEXT NULL,
+        \`parent_id\` INT NULL,
+        \`image_url\` VARCHAR(500) NULL,
+        \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `, [], executingUserId, 'Create categories table if not exists');
+  } catch (e) {
+    console.error('ensureCategoriesTable error:', e.message);
+  }
+};
 
-    async getCategoryById(id) {
-        const rows = await dbQuery('SELECT * FROM categories WHERE id = ?', [id])
-        return rows[0] || null
-    },
+export const getAllCategories = async (executingUserId) => {
+  await ensureCategoriesTable(executingUserId);
+  const sql = 'SELECT * FROM \`categories\` ORDER BY \`id\` ASC';
+  return dbQuery(sql, [], executingUserId, 'Fetch all categories');
+};
 
-    async createCategory({ name, description, image_url, parent_id }) {
-        const pid = (parent_id === 'null' || parent_id === '' || parent_id === undefined) ? null : parent_id
-        const sql = 'INSERT INTO categories (name, description, image_url, parent_id) VALUES (?, ?, ?, ?)'
-        return await dbQuery(sql, [name, description, image_url, pid])
-    },
+export const getCategoryById = async (id, executingUserId) => {
+  await ensureCategoriesTable(executingUserId);
+  const sql = 'SELECT * FROM \`categories\` WHERE \`id\` = ? LIMIT 1';
+  const rows = await dbQuery(sql, [id], executingUserId, `Fetch category ID: ${id}`);
+  return rows[0] || null;
+};
 
-    async updateCategory(id, { name, description, image_url, parent_id, primaryImageAction }) {
-        const updates = []
-        const params = []
+export const createCategory = async (data, executingUserId) => {
+  await ensureCategoriesTable(executingUserId);
+  const columns = Object.keys(data);
+  const placeholders = columns.map(() => '?').join(', ');
+  const values = Object.values(data);
+  const sql = `INSERT INTO \`categories\` (${columns.map(c => `\`${c}\``).join(', ')}) VALUES (${placeholders})`;
+  return dbQuery(sql, values, executingUserId, `Created category: "${data.name}"`);
+};
 
-        if (name !== undefined) {
-            updates.push('name = ?')
-            params.push(name)
-        }
-        if (description !== undefined) {
-            updates.push('description = ?')
-            params.push(description)
-        }
-        if (primaryImageAction === 'remove') {
-            updates.push('image_url = ?')
-            params.push('')
-        } else if (image_url !== undefined) {
-            updates.push('image_url = ?')
-            params.push(image_url)
-        }
-        if (parent_id !== undefined) {
-            const pid = (parent_id === 'null' || parent_id === '' || parent_id === undefined) ? null : parent_id
-            updates.push('parent_id = ?')
-            params.push(pid)
-        }
+export const updateCategory = async (id, data, executingUserId) => {
+  await ensureCategoriesTable(executingUserId);
+  const setClause = Object.keys(data).map(c => `\`${c}\` = ?`).join(', ');
+  const sql = `UPDATE \`categories\` SET ${setClause} WHERE \`id\` = ?`;
+  const values = [...Object.values(data), id];
+  return dbQuery(sql, values, executingUserId, `Updated category ID: ${id}`);
+};
 
-        if (updates.length === 0) return
-
-        params.push(id)
-        const sql = `UPDATE categories SET ${updates.join(', ')} WHERE id = ?`
-        return await dbQuery(sql, params)
-    },
-
-    async deleteCategory(id) {
-        return await dbQuery('DELETE FROM categories WHERE id = ?', [id])
-    }
-}
-
-module.exports = categoryModel
+export const deleteCategory = async (id, executingUserId) => {
+  await ensureCategoriesTable(executingUserId);
+  const sql = 'DELETE FROM \`categories\` WHERE \`id\` = ?';
+  return dbQuery(sql, [id], executingUserId, `Deleted category ID: ${id}`);
+};

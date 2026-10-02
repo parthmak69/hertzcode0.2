@@ -1,7 +1,7 @@
 import mysql from "mysql2/promise";
 
 const getDbConfig = () => ({
-  host: process.env.DB_HOST || "localhost",
+  host: process.env.DB_HOST || "127.0.0.1",
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
 });
@@ -152,16 +152,21 @@ export const createTable = async (req, res) => {
       }
     }
 
-    if (createdOnOption) {
+    const existingDefsStr = columnDefinitions.join(' ').toLowerCase();
+    if (!existingDefsStr.includes('`createdby`') && !existingDefsStr.includes('`created_by`')) {
+      columnDefinitions.push("`createdBy` VARCHAR(255) DEFAULT NULL");
+    }
+    if (!existingDefsStr.includes('`createdon`') && !existingDefsStr.includes('`created_on`')) {
       columnDefinitions.push("`createdOn` DATETIME DEFAULT CURRENT_TIMESTAMP");
     }
-
-    if (modifiedOnOption) {
-      columnDefinitions.push("`modifiedOn` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+    if (!existingDefsStr.includes('`modifiedon`') && !existingDefsStr.includes('`modified_on`')) {
+      columnDefinitions.push("`modifiedOn` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP");
     }
-
-    if (isDeletedOption) {
+    if (!existingDefsStr.includes('`isdeleted`') && !existingDefsStr.includes('`is_deleted`')) {
       columnDefinitions.push("`isDeleted` TINYINT(1) DEFAULT 0");
+    }
+    if (!existingDefsStr.includes('`deletedon`') && !existingDefsStr.includes('`deleted_on`')) {
+      columnDefinitions.push("`deletedOn` DATETIME DEFAULT NULL");
     }
 
     if (columnDefinitions.length === 0) {
@@ -452,13 +457,16 @@ export const updateTableRow = async (req, res) => {
 };
 
 // ==================== 8. ROWS DELETE ====================
-export const deleteTableRow = async (req, res) => {
+export async function deleteTableRow(req, res) {
   let connection;
   try {
-    const { dbName, tableName, id, username } = req.query;
+    const dbName = req.query.dbName || req.body?.dbName;
+    const tableName = req.query.tableName || req.body?.tableName;
+    const id = req.query.id || req.body?.id;
+    const username = req.query.username || req.body?.username || "admin";
 
     if (!dbName || !tableName || !id) {
-      return res.status(400).json({ success: false, error: "dbName, tableName and id query parameters are required." });
+      return res.status(400).json({ success: false, error: "dbName, tableName and id parameters are required." });
     }
 
     if (dbName.startsWith("mongodb:")) {
@@ -471,22 +479,39 @@ export const deleteTableRow = async (req, res) => {
     });
 
     const pkColumn = await getPrimaryKeyColumn(connection, tableName);
-    const sql = `DELETE FROM \`${tableName}\` WHERE \`${pkColumn}\` = ?`;
-    const [result] = await connection.execute(sql, [id]);
+    try {
+      await connection.execute(
+        `UPDATE \`${tableName}\` SET \`isDeleted\` = 1, \`deletedOn\` = CURRENT_TIMESTAMP WHERE \`${pkColumn}\` = ?`,
+        [id]
+      );
+    } catch (e) {
+      try {
+        await connection.query(
+          `ALTER TABLE \`${tableName}\` ADD COLUMN \`isDeleted\` TINYINT(1) DEFAULT 0, ADD COLUMN \`deletedOn\` DATETIME NULL DEFAULT NULL`
+        );
+        await connection.execute(
+          `UPDATE \`${tableName}\` SET \`isDeleted\` = 1, \`deletedOn\` = CURRENT_TIMESTAMP WHERE \`${pkColumn}\` = ?`,
+          [id]
+        );
+      } catch (alterErr) {
+        await connection.execute(`DELETE FROM \`${tableName}\` WHERE \`${pkColumn}\` = ?`, [id]);
+      }
+    }
 
-    // Log to query_logger
-    await logQueryToLogger(connection, sql, [id], "Admin Portal - Delete Row", username);
+    try {
+      await logQueryToLogger(connection, `DELETE FROM \`${tableName}\` WHERE \`${pkColumn}\` = ?`, [id], "Admin Portal - Delete Row", username);
+    } catch (logErr) {}
 
-    return res.json({ success: true, affectedRows: result.affectedRows });
+    return res.json({ success: true, message: "Record deleted successfully" });
   } catch (err) {
     console.error("Delete Row Error:", err);
     return res.status(500).json({ success: false, error: err.message });
   } finally {
     if (connection) {
-      try { await connection.end(); } catch (e) {}
+      try { await connection.end(); } catch (e) { }
     }
   }
-};
+}
 
 // ==================== 9. SEED MOCK DATA ====================
 const getMockVal = (category, fieldName = "", fieldType = "", customVal) => {
@@ -740,3 +765,4 @@ export const seedTable = async (req, res) => {
     }
   }
 };
+
