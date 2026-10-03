@@ -5,8 +5,9 @@ import { Input, Select, Textarea, RadioGroup, RangeSlider, FormSection, Toggle }
 import DatePicker from '@/components/ui/DatePicker'
 import RichTextEditor from '@/components/ui/RichTextEditor'
 import MultiSelect from '@/components/ui/MultiSelect'
-import { Plus, Trash2, Upload, X, FileText } from 'lucide-react'
+import { Plus, Trash2, Upload, X, FileText, Sparkles, Shuffle } from 'lucide-react'
 import { apiClient } from '@/utils/api'
+import { toast } from '@/components/ui/Toast'
 
 // Premium button styles matching products forms
 const BTN = 'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all active:scale-[0.98]'
@@ -97,60 +98,71 @@ export default function MasterForm({ record, onSubmit, onCancel }) {
             const parsedDate = record.date_picker ? new Date(record.date_picker) : null
             const parsedDatetime = record.datetime_picker ? new Date(record.datetime_picker) : null
 
+            // Parse JSON fields safely if string
+            let parsedTags = record.multi_select_tags
+            if (typeof parsedTags === 'string') {
+                try { parsedTags = JSON.parse(parsedTags) || [] } catch { parsedTags = [] }
+            }
+            let parsedMeta = record.json_metadata
+            if (typeof parsedMeta === 'string') {
+                try { parsedMeta = JSON.parse(parsedMeta) || {} } catch { parsedMeta = {} }
+            }
+            let parsedGallery = record.gallery_images
+            if (typeof parsedGallery === 'string') {
+                try { parsedGallery = JSON.parse(parsedGallery) || [] } catch { parsedGallery = [] }
+            }
+
+            const titleVal = record.text_title ?? record.title ?? record.name ?? record.full_name ?? ''
+            const subtitleVal = record.short_notes ?? record.subtitle ?? record.description ?? ''
+            const contentVal = record.rich_wysiwyg_content ?? record.content ?? record.wysiwyg ?? ''
+            const activeVal = (record.switch_active === 1 || record.switch_active === true || record.is_active === 1 || record.is_active === true || record.active === true || record.active === 1)
+            const primaryImg = record.primary_image_url || record.image_url || record.photo || record.image || ''
+            const docFile = record.document_file_url || record.file_url || record.file || ''
+
             setFormData({
-                text_title: record.text_title ?? '',
+                text_title: titleVal,
+                title: titleVal,
                 slug: record.slug ?? '',
                 email: record.email ?? '',
                 password: '', // Kept empty for editing
                 website_url: record.website_url ?? '',
                 phone: record.phone ?? '',
-                integer_qty: record.integer_qty ?? 1,
-                decimal_price: record.decimal_price ?? 0.00,
+                integer_qty: record.integer_qty ?? record.qty ?? record.quantity ?? record.stock ?? 1,
+                decimal_price: record.decimal_price ?? record.price ?? 0.00,
                 tax_percentage: record.tax_percentage ?? 0.00,
                 range_slider_value: record.range_slider_value ?? 50,
-                short_notes: record.short_notes ?? '',
-                rich_wysiwyg_content: record.rich_wysiwyg_content ?? '',
-                dropdown_selection: record.dropdown_selection ?? 'grocery_staples',
+                short_notes: subtitleVal,
+                rich_wysiwyg_content: contentVal,
+                dropdown_selection: record.dropdown_selection ?? record.category ?? 'grocery_staples',
                 radio_selection: record.radio_selection ?? 'credit_card',
                 checkbox_toggle: record.checkbox_toggle === 1 || record.checkbox_toggle === true,
-                switch_active: record.switch_active === 1 || record.switch_active === true,
+                switch_active: activeVal,
                 date_picker: parsedDate,
                 datetime_picker: parsedDatetime,
                 time_picker: record.time_picker ?? '12:00:00',
-                primary_image_url: record.primary_image_url ?? '',
-                document_file_url: record.document_file_url ?? '',
-                gallery_images: Array.isArray(record.gallery_images) ? record.gallery_images : [],
-                multi_select_tags: Array.isArray(record.multi_select_tags) ? record.multi_select_tags : [],
+                primary_image_url: primaryImg,
+                document_file_url: docFile,
+                gallery_images: Array.isArray(parsedGallery) ? parsedGallery : [],
+                multi_select_tags: Array.isArray(parsedTags) ? parsedTags : [],
             })
 
             // Sync Primary File Preview
             setImageFile(null)
-            setImagePreview(record.primary_image_url ? (record.primary_image_url.startsWith('http') ? record.primary_image_url : `/${record.primary_image_url}`) : null)
+            setImagePreview(primaryImg ? (primaryImg.startsWith('http') ? primaryImg : `/${primaryImg}`) : null)
             setPrimaryImageAction('none')
 
             // Sync Document File Preview
             setDocumentFile(null)
-            setDocumentPreview(record.document_file_url ? (record.document_file_url.startsWith('http') ? record.document_file_url : `/${record.document_file_url}`) : null)
+            setDocumentPreview(docFile ? (docFile.startsWith('http') ? docFile : `/${docFile}`) : null)
             setDocumentFileAction('none')
 
             // Sync Secondary Gallery items
-            let existing = record.gallery_images
-            if (!Array.isArray(existing)) {
-                if (typeof existing === 'string') {
-                    try {
-                        existing = JSON.parse(existing) || []
-                    } catch {
-                        existing = existing ? [existing] : []
-                    }
-                } else {
-                    existing = []
-                }
-            }
+            let existing = Array.isArray(parsedGallery) ? parsedGallery : []
             setSecondaryList(existing.map((url) => ({ preview: url.startsWith('http') ? url : `/${url}` })))
 
             // Extract metadata JSON object to structured key-value state array
-            if (record.json_metadata && typeof record.json_metadata === 'object') {
-                const metaArr = Object.entries(record.json_metadata).map(([k, v]) => ({
+            if (parsedMeta && typeof parsedMeta === 'object') {
+                const metaArr = Object.entries(parsedMeta).map(([k, v]) => ({
                     key: k,
                     value: String(v),
                 }))
@@ -264,64 +276,181 @@ export default function MasterForm({ record, onSubmit, onCancel }) {
         setDocumentFileAction('remove')
     }, [])
 
+    const generateLocalFakerMaster = (category = 'grocery_staples') => {
+        const titles = {
+            grocery_staples: [
+                'Premium Organic Whole Grain Rolled Oats 1kg',
+                'Cold-Pressed Extra Virgin Olive Oil 750ml',
+                'Himalayan Pink Rock Salt Grinder 250g',
+                'Artisan Roasted Arabica Coffee Beans 500g',
+                'Organic Grade-A Raw Honey Jar 400g'
+            ],
+            coupons_promos: [
+                '50% OFF Festive Holiday Mega Savings Pass',
+                'Weekend Flash Deal: $25 Cash Voucher',
+                'Buy-1-Get-1 Free Anniversary VIP Coupon',
+                'First Order 30% Promo Code: WELCOME30'
+            ],
+            crm_vendor: [
+                'Authorized Enterprise Cloud Solutions Partner',
+                'Premier Global Logistics & Freight Provider',
+                'Certified Security Compliance & Audit Vendor',
+                'Apex Regional Distribution Representative'
+            ],
+            system_configs: [
+                'Global SSL Encryption & High-Availability Proxy',
+                'Automatic Database Backup & Sharding Protocol',
+                'Redis Cache Invalidation & TTL Policy',
+                'Multi-Factor Authentication & IP Whitelist Gate'
+            ]
+        }
+
+        const list = titles[category] || titles.grocery_staples
+        const title = list[Math.floor(Math.random() * list.length)]
+        const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+        const now = new Date()
+        const dateStr = now.toISOString().split('T')[0]
+        const datetimeStr = now.toISOString().replace('T', ' ').substring(0, 19)
+
+        const tagOptions = {
+            grocery_staples: ['organic', 'best-seller', 'staples'],
+            coupons_promos: ['discount', 'best-seller'],
+            crm_vendor: ['wholesale', 'verified-dealer'],
+            system_configs: ['restricted-access', 'wholesale']
+        }
+
+        const tags = tagOptions[category] || ['organic', 'best-seller']
+
+        return {
+            text_title: title,
+            slug: slug,
+            email: `partner.${slug.substring(0, 8)}@example.com`,
+            password_hash: 'DemoPass@1234',
+            website_url: `https://example.com/items/${slug}`,
+            phone: '+1 555-' + Math.floor(1000000 + Math.random() * 9000000),
+            integer_qty: Math.floor(Math.random() * 150) + 10,
+            decimal_price: parseFloat((Math.random() * 85 + 12).toFixed(2)),
+            tax_percentage: 18.00,
+            range_slider_value: Math.floor(Math.random() * 70) + 20,
+            short_notes: `Curated ${title} suitable for testing admin forms, validation rules, and relational schemas.`,
+            rich_wysiwyg_content: `<h3>${title}</h3><p>This entry was populated using the dynamic Master Form Faker Filler. Supports multi-select tags, rich HTML editing, media attachments, and JSON metadata key-values.</p>`,
+            dropdown_selection: category,
+            radio_selection: 'credit_card',
+            checkbox_toggle: true,
+            switch_active: true,
+            date_picker: dateStr,
+            datetime_picker: datetimeStr,
+            time_picker: '12:00:00',
+            primary_image_url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80',
+            document_file_url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+            gallery_images: [
+                'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=600&q=80',
+                'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80'
+            ],
+            multi_select_tags: tags,
+            json_metadata: {
+                brand: 'OmniMaster Pro',
+                warranty: '2 Years',
+                certified: 'Yes'
+            }
+        }
+    }
+
+    const applyFakeData = (fake) => {
+        // Parse dates
+        const parsedDate = fake.date_picker ? new Date(fake.date_picker) : new Date()
+        const parsedDatetime = fake.datetime_picker ? new Date(fake.datetime_picker) : new Date()
+
+        // Safely parse gallery, tags, metadata whether strings or objects
+        let parsedGallery = fake.gallery_images
+        if (typeof parsedGallery === 'string') {
+            try { parsedGallery = JSON.parse(parsedGallery) } catch { parsedGallery = [] }
+        }
+        if (!Array.isArray(parsedGallery)) parsedGallery = []
+
+        let parsedTags = fake.multi_select_tags
+        if (typeof parsedTags === 'string') {
+            try { parsedTags = JSON.parse(parsedTags) } catch { parsedTags = [] }
+        }
+        if (!Array.isArray(parsedTags)) parsedTags = []
+
+        let parsedMeta = fake.json_metadata
+        if (typeof parsedMeta === 'string') {
+            try { parsedMeta = JSON.parse(parsedMeta) } catch { parsedMeta = {} }
+        }
+        if (!parsedMeta || typeof parsedMeta !== 'object') parsedMeta = {}
+
+        setFormData((prev) => ({
+            ...prev,
+            text_title: fake.text_title ?? '',
+            slug: fake.slug ?? '',
+            email: fake.email ?? '',
+            password: fake.password_hash ?? '',
+            website_url: fake.website_url ?? '',
+            phone: fake.phone ?? '',
+            integer_qty: fake.integer_qty ?? 1,
+            decimal_price: fake.decimal_price ?? 0.00,
+            tax_percentage: fake.tax_percentage ?? 0.00,
+            range_slider_value: fake.range_slider_value ?? 50,
+            short_notes: fake.short_notes ?? '',
+            rich_wysiwyg_content: fake.rich_wysiwyg_content ?? '',
+            dropdown_selection: fake.dropdown_selection ?? prev.dropdown_selection ?? 'grocery_staples',
+            radio_selection: fake.radio_selection ?? 'credit_card',
+            checkbox_toggle: fake.checkbox_toggle === 1 || fake.checkbox_toggle === true,
+            switch_active: fake.switch_active === 1 || fake.switch_active === true,
+            date_picker: parsedDate,
+            datetime_picker: parsedDatetime,
+            time_picker: fake.time_picker ?? '12:00:00',
+            primary_image_url: fake.primary_image_url ?? '',
+            document_file_url: fake.document_file_url ?? '',
+            gallery_images: parsedGallery,
+            multi_select_tags: parsedTags,
+        }))
+
+        // Set Primary File Preview
+        const primaryUrl = fake.primary_image_url || ''
+        setImageFile(null)
+        setImagePreview(primaryUrl ? (primaryUrl.startsWith('http') || primaryUrl.startsWith('/') ? primaryUrl : `/${primaryUrl}`) : null)
+        setPrimaryImageAction('upload')
+
+        // Set Document File Preview
+        const docUrl = fake.document_file_url || ''
+        setDocumentFile(null)
+        setDocumentPreview(docUrl ? (docUrl.startsWith('http') || docUrl.startsWith('/') ? docUrl : `/${docUrl}`) : null)
+        setDocumentFileAction('upload')
+
+        // Set Secondary Gallery list
+        setSecondaryList(parsedGallery.map(url => ({ preview: (url.startsWith('http') || url.startsWith('/') ? url : `/${url}`) })))
+
+        // Set Metadata list
+        const metaEntries = Object.entries(parsedMeta)
+        if (metaEntries.length > 0) {
+            setMetadataList(metaEntries.map(([k, v]) => ({ key: k, value: String(v) })))
+        } else {
+            setMetadataList([{ key: 'brand', value: 'OmniMaster Pro' }, { key: 'warranty', value: '2 Years' }])
+        }
+
+        if (toast && typeof toast.info === 'function') {
+            toast.info('Filled master form with dynamic fake data!')
+        } else if (toast && typeof toast.success === 'function') {
+            toast.success('Filled master form with dynamic fake data!')
+        }
+    }
+
     const handleFillFakeData = async () => {
+        const currentSelection = formData.dropdown_selection || 'grocery_staples'
         try {
-            const currentSelection = formData.dropdown_selection || 'grocery_staples'
             const res = await apiClient.get(`/testing/fake-data?type=master&category=${currentSelection}`)
-            if (res.success && res.data) {
-                const fake = res.data
-
-                // Parse dates
-                const parsedDate = fake.date_picker ? new Date(fake.date_picker) : null
-                const parsedDatetime = fake.datetime_picker ? new Date(fake.datetime_picker) : null
-
-                setFormData({
-                    text_title: fake.text_title ?? '',
-                    slug: fake.slug ?? '',
-                    email: fake.email ?? '',
-                    password: fake.password_hash ?? '',
-                    website_url: fake.website_url ?? '',
-                    phone: fake.phone ?? '',
-                    integer_qty: fake.integer_qty ?? 1,
-                    decimal_price: fake.decimal_price ?? 0.00,
-                    tax_percentage: fake.tax_percentage ?? 0.00,
-                    range_slider_value: fake.range_slider_value ?? 50,
-                    short_notes: fake.short_notes ?? '',
-                    rich_wysiwyg_content: fake.rich_wysiwyg_content ?? '',
-                    dropdown_selection: fake.dropdown_selection ?? 'grocery_staples',
-                    radio_selection: fake.radio_selection ?? 'credit_card',
-                    checkbox_toggle: fake.checkbox_toggle === 1 || fake.checkbox_toggle === true,
-                    switch_active: fake.switch_active === 1 || fake.switch_active === true,
-                    date_picker: parsedDate,
-                    datetime_picker: parsedDatetime,
-                    time_picker: fake.time_picker ?? '12:00:00',
-                    primary_image_url: fake.primary_image_url ?? '',
-                    document_file_url: fake.document_file_url ?? '',
-                    gallery_images: fake.gallery_images ? JSON.parse(fake.gallery_images) : [],
-                    multi_select_tags: fake.multi_select_tags ? JSON.parse(fake.multi_select_tags) : [],
-                })
-
-                // Set Primary File Preview
-                setImageFile(null)
-                setImagePreview(fake.primary_image_url ? `/${fake.primary_image_url}` : null)
-                setPrimaryImageAction('none')
-
-                // Set Document File Preview
-                setDocumentFile(null)
-                setDocumentPreview(fake.document_file_url ? `/${fake.document_file_url}` : null)
-                setDocumentFileAction('none')
-
-                // Set Secondary Gallery list
-                const gallery = fake.gallery_images ? JSON.parse(fake.gallery_images) : []
-                setSecondaryList(gallery.map(url => ({ preview: `/${url}` })))
-
-                // Set Metadata
-                const meta = fake.json_metadata ? JSON.parse(fake.json_metadata) : {}
-                setMetadataList(Object.entries(meta).map(([k, v]) => ({ key: k, value: String(v) })))
+            if (res && res.success && res.data && res.data.text_title) {
+                applyFakeData(res.data)
+                return
             }
         } catch (err) {
-            console.error('Failed to fill fake master data:', err)
+            console.warn('Backend faker endpoint unavailable, falling back to client faker:', err)
         }
+
+        const localFake = generateLocalFakerMaster(currentSelection)
+        applyFakeData(localFake)
     }
 
     // Submit payload construction
@@ -863,8 +992,9 @@ export default function MasterForm({ record, onSubmit, onCancel }) {
                 <button
                     type="button"
                     onClick={handleFillFakeData}
-                    className="mr-auto px-4 py-2 text-sm font-semibold bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-xl cursor-pointer transition flex items-center gap-1.5 active:scale-95"
+                    className="mr-auto px-4 py-2 text-sm font-semibold bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-xl cursor-pointer transition flex items-center gap-2 active:scale-95 shadow-sm hover:shadow"
                 >
+                    <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" />
                     Fill Fake Data
                 </button>
 

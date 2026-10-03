@@ -12,6 +12,7 @@ import aiRoutes from "./routes/aiRoutes.js";
 import crudRoutes from "./routes/crudRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import adminsRoutes from "./routes/admin/adminsRoutes.js";
+import masterFormRoutes from "./routes/masterFormRoutes.js";
 import uploadParser from "./middleware/uploadMiddleware.js";
 
 dotenv.config();
@@ -122,8 +123,63 @@ app.get(['/testing/fake-data', '/api/testing/fake-data'], (req, res) => {
     { name: 'Modern Home & Kitchen', description: 'Furniture, decor, kitchen tools, and smart home appliances.', image_url: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=600&q=80' },
     { name: 'Fashion & Urban Wear', description: 'Trending men and women clothing, footwear, and fashion accessories.', image_url: 'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=600&q=80' }
   ];
+
+  if (type === 'master' || type === 'master_form' || type === 'master_form_inputs') {
+    const category = req.query.category || 'grocery_staples';
+    const sampleProducts = [
+      { title: 'Organic Whole Grain Rolled Oats 1kg', cat: 'grocery_staples', price: 14.99, tag: 'organic' },
+      { title: 'Extra Virgin Cold-Pressed Olive Oil 750ml', cat: 'grocery_staples', price: 24.50, tag: 'best-seller' },
+      { title: '50% OFF Festive Holiday Mega Savings Pass', cat: 'coupons_promos', price: 0.00, tag: 'discount' },
+      { title: 'Authorized Enterprise Cloud Solutions Partner', cat: 'crm_vendor', price: 499.00, tag: 'verified-dealer' },
+      { title: 'Global SSL Encryption & High-Availability Proxy', cat: 'system_configs', price: 120.00, tag: 'restricted-access' }
+    ];
+    const match = sampleProducts.find(p => p.cat === category) || sampleProducts[Math.floor(Math.random() * sampleProducts.length)];
+    const title = match.title;
+    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const datetimeStr = now.toISOString().replace('T', ' ').substring(0, 19);
+
+    return res.json({
+      success: true,
+      data: {
+        text_title: title,
+        slug: slug,
+        email: `contact.${slug.substring(0, 8)}@example.com`,
+        password_hash: 'DemoPass@1234',
+        website_url: `https://example.com/items/${slug}`,
+        phone: '+1 555-' + Math.floor(1000000 + Math.random() * 9000000),
+        integer_qty: Math.floor(Math.random() * 100) + 5,
+        decimal_price: match.price || parseFloat((Math.random() * 80 + 10).toFixed(2)),
+        tax_percentage: 18.00,
+        range_slider_value: Math.floor(Math.random() * 80) + 10,
+        short_notes: `Curated ${title} suitable for testing admin data pipelines, filters, and reports.`,
+        rich_wysiwyg_content: `<h3>${title}</h3><p>This master form entry was automatically populated with high quality dummy test data. All input attributes including dates, sliders, tags, and media previews are pre-filled.</p>`,
+        dropdown_selection: category,
+        radio_selection: 'credit_card',
+        checkbox_toggle: 1,
+        switch_active: 1,
+        date_picker: dateStr,
+        datetime_picker: datetimeStr,
+        time_picker: '12:00:00',
+        primary_image_url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80',
+        document_file_url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+        gallery_images: [
+          'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=600&q=80',
+          'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80'
+        ],
+        multi_select_tags: [match.tag, 'best-seller', 'staples'],
+        json_metadata: {
+          brand: 'OmniMaster Pro',
+          warranty: '2 Years',
+          certified: true
+        }
+      }
+    });
+  }
+
   const randomCat = fakeCategories[Math.floor(Math.random() * fakeCategories.length)];
-  res.json({ success: true, data: type === 'category' ? randomCat : randomCat });
+  res.json({ success: true, data: randomCat });
 });
 
 // Storage quota status endpoint used by Admin templates
@@ -152,7 +208,8 @@ app.use("/api/crud", crudRoutes);
 
 // Admin Profile & User Management Routes
 app.use(["/admin/admins", "/api/admin/admins", "/api/admins"], adminsRoutes);
-app.use(["/admin/admin", "/api/admin/admin", "/api/admin"], adminRoutes);
+app.use(["/admin/admin", "/api/admin/admin"], adminRoutes);
+app.use(["/admin/master-form", "/api/admin/master-form", "/api/apiAdmin/master-form", "/api/master-form", "/api/master_form_inputs", "/master-form"], masterFormRoutes);
 
 // Helper to get MySQL Connection for Dynamic Table CRUD (supports dynamic DB discovery)
 const getDynamicDbConnection = async (reqOrDbName) => {
@@ -352,13 +409,19 @@ export async function loadMvcRoutes() {
               aliases.add('master_form');
               aliases.add('masterform');
               aliases.add('forms');
+              aliases.add('master_form_inputs');
+              aliases.add('master-form-inputs');
+              aliases.add('master_forms');
+              aliases.add('master-forms');
             }
 
             aliases.forEach(name => {
               app.use('/api/' + apiPrefix + '/' + name, router);
               app.use('/api/admin/' + name, router);
               app.use('/admin/' + name, router);
-              app.use('/api/' + name, router);
+              if (name !== 'admin' && name !== 'customer') {
+                app.use('/api/' + name, router);
+              }
             });
             console.log('[MVC ROUTE] Registered ' + file + ' (aliases: ' + Array.from(aliases).join(', ') + ')');
           } catch (err) {

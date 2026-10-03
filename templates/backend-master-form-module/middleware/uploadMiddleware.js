@@ -33,6 +33,15 @@ const uploadParser = [
             if (req.body && req.body.existing_gallery_urls !== undefined) {
                 req.body.gallery_images = req.body.existing_gallery_urls;
             }
+            if (req.body && req.body.primaryImageAction === 'remove') {
+                req.body.primary_image_url = '';
+                req.body.image_url = '';
+                req.body.photo = '';
+            }
+            if (req.body && req.body.documentFileAction === 'remove') {
+                req.body.document_file_url = '';
+                req.body.file_url = '';
+            }
             return next();
         }
 
@@ -64,25 +73,31 @@ const uploadParser = [
             await fs.mkdir(uploadDir, { recursive: true });
 
             // 1. Primary image file
-            const primaryFile = files.primary_image_file || files.product_image || files.primary_image || files.primary_image_url;
+            const primaryFile = files.primary_image_file || files.product_image || files.primary_image || files.primary_image_url || files.image_file;
             if (primaryFile && primaryFile.size > 0) {
                 const ext = path.extname(primaryFile.originalname) || '.jpg';
                 const filename = `primary-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`;
                 await fs.writeFile(path.join(uploadDir, filename), primaryFile.buffer);
                 req.body.primary_image_url = `uploads/${filename}`;
+                req.body.image_url = `uploads/${filename}`;
+                req.body.photo = `uploads/${filename}`;
             } else if (req.body.primaryImageAction === 'remove') {
                 req.body.primary_image_url = '';
+                req.body.image_url = '';
+                req.body.photo = '';
             }
 
             // 2. Document file
-            const docFile = files.document_file || files.document_file_url;
+            const docFile = files.document_file || files.document_file_url || files.doc_file;
             if (docFile && docFile.size > 0) {
                 const ext = path.extname(docFile.originalname) || '.pdf';
                 const filename = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`;
                 await fs.writeFile(path.join(uploadDir, filename), docFile.buffer);
                 req.body.document_file_url = `uploads/${filename}`;
+                req.body.file_url = `uploads/${filename}`;
             } else if (req.body.documentFileAction === 'remove') {
                 req.body.document_file_url = '';
+                req.body.file_url = '';
             }
 
             // 3. Gallery / Secondary files

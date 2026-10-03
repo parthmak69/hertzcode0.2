@@ -17,14 +17,32 @@ import ImportModal from '@/components/modals/ImportModal'
 
 const allColumns = [
     { key: 'id', label: 'ID', sortable: true, width: '50px' },
-    { key: 'text_title', label: 'Record Name', sortable: true, width: '160px' },
-    { key: 'slug', label: 'URL Slug', width: '100px' },
-    { key: 'email', label: 'Email', width: '140px' },
-    { key: 'integer_qty', label: 'Qty / Stock', sortable: true, width: '80px' },
-    { key: 'decimal_price', label: 'Price (₹)', sortable: true, width: '85px' },
-    { key: 'multi_select_tags', label: 'Tags', width: '100px' },
-    { key: 'date_picker', label: 'Date', sortable: true, width: '95px' },
-    { key: 'switch_active', label: 'Active Toggle', width: '110px' },
+    { key: 'text_title', label: 'Record Name', sortable: true, width: '180px' },
+    { key: 'slug', label: 'Slug', width: '170px' },
+    { key: 'email', label: 'Email', width: '190px' },
+    { key: 'website_url', label: 'Website', width: '190px' },
+    { key: 'phone', label: 'Phone', width: '140px' },
+    { key: 'integer_qty', label: 'Quantity', sortable: true, width: '90px' },
+    { key: 'decimal_price', label: 'Price', sortable: true, width: '100px' },
+    { key: 'tax_percentage', label: 'Tax %', sortable: true, width: '85px' },
+    { key: 'range_slider_value', label: 'Rating', sortable: true, width: '85px' },
+    { key: 'short_notes', label: 'Notes', width: '220px' },
+    { key: 'rich_wysiwyg_content', label: 'Content', width: '220px' },
+    { key: 'dropdown_selection', label: 'Category', width: '140px' },
+    { key: 'radio_selection', label: 'Payment Option', width: '150px' },
+    { key: 'checkbox_toggle', label: 'Checkbox', width: '100px' },
+    { key: 'switch_active', label: 'Active', width: '100px' },
+    { key: 'date_picker', label: 'Date', sortable: true, width: '120px' },
+    { key: 'datetime_picker', label: 'Date & Time', sortable: true, width: '170px' },
+    { key: 'time_picker', label: 'Time', width: '100px' },
+    { key: 'primary_image_url', label: 'Primary Image', width: '190px' },
+    { key: 'document_file_url', label: 'Document', width: '190px' },
+    { key: 'gallery_images', label: 'Gallery Images', width: '190px' },
+    { key: 'multi_select_tags', label: 'Tags', width: '180px' },
+    { key: 'json_metadata', label: 'Metadata', width: '190px' },
+    { key: 'repeater_data', label: 'Repeater Data', width: '190px' },
+    { key: 'created_at', label: 'Created', sortable: true, width: '170px' },
+    { key: 'updated_at', label: 'Updated', sortable: true, width: '170px' },
 ]
 
 export default function MasterFormPage() {
@@ -125,8 +143,12 @@ export default function MasterFormPage() {
     const confirmDelete = async () => {
         setDeleteLoading(true)
         try {
-            await remove(deleteId)
-            setDeleteId(null)
+            const res = await remove(deleteId)
+            if (res && res.success !== false) {
+                setDeleteId(null)
+            } else {
+                alert(res?.message || 'Failed to delete record')
+            }
         } finally {
             setDeleteLoading(false)
         }
@@ -139,9 +161,13 @@ export default function MasterFormPage() {
     const confirmBulkDelete = async () => {
         setBulkDeleteLoading(true)
         try {
-            await removeBulk(selectedIds)
-            setSelectedIds([])
-            setIsBulkDeleteOpen(false)
+            const res = await removeBulk(selectedIds)
+            if (res && res.success !== false) {
+                setSelectedIds([])
+                setIsBulkDeleteOpen(false)
+            } else {
+                alert(res?.message || 'Failed to bulk delete records')
+            }
         } finally {
             setBulkDeleteLoading(false)
         }
@@ -409,6 +435,73 @@ export default function MasterFormPage() {
                     </button>
                 )
             }
+
+            case 'website_url':
+                return item.website_url ? (
+                    <a href={item.website_url} target="_blank" rel="noreferrer" className="text-primary hover:underline text-xs truncate max-w-[180px] block font-mono">
+                        {item.website_url}
+                    </a>
+                ) : <span className="text-muted-foreground text-xs">N/A</span>
+
+            case 'phone':
+                return <span className="text-muted-foreground text-xs font-mono">{item.phone || 'N/A'}</span>
+
+            case 'tax_percentage':
+                return <span className="text-xs font-medium text-foreground">{item.tax_percentage ? `${item.tax_percentage}%` : '0%'}</span>
+
+            case 'range_slider_value':
+                return <span className="text-xs font-medium text-amber-500 font-mono">{item.range_slider_value ?? 50}%</span>
+
+            case 'short_notes':
+            case 'rich_wysiwyg_content': {
+                const text = item[colKey] || ''
+                return <span className="block max-w-[220px] truncate text-xs text-muted-foreground" title={text}>{text || '—'}</span>
+            }
+
+            case 'dropdown_selection':
+                return <span className="text-xs px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground font-mono">{item.dropdown_selection || 'N/A'}</span>
+
+            case 'radio_selection':
+                return <span className="text-xs text-muted-foreground capitalize">{item.radio_selection ? String(item.radio_selection).replace(/_/g, ' ') : 'N/A'}</span>
+
+            case 'datetime_picker':
+                if (!item.datetime_picker) return <span className="text-muted-foreground text-xs">N/A</span>
+                return <span className="text-xs text-muted-foreground font-mono">{String(item.datetime_picker).replace('T', ' ').substring(0, 19)}</span>
+
+            case 'time_picker':
+                return <span className="text-xs text-muted-foreground font-mono">{item.time_picker || 'N/A'}</span>
+
+            case 'primary_image_url':
+                if (!item.primary_image_url) return <span className="text-muted-foreground text-xs">No Image</span>
+                return (
+                    <div className="flex items-center gap-2">
+                        <img src={item.primary_image_url} alt="Primary" className="w-8 h-8 rounded-md object-cover border border-border" />
+                        <span className="text-xs text-muted-foreground truncate max-w-[120px]">{item.primary_image_url}</span>
+                    </div>
+                )
+
+            case 'document_file_url':
+                if (!item.document_file_url) return <span className="text-muted-foreground text-xs">No Doc</span>
+                return (
+                    <a href={item.document_file_url} target="_blank" rel="noreferrer" className="text-primary hover:underline text-xs truncate max-w-[160px] block">
+                        📄 {item.document_file_url.split('/').pop()}
+                    </a>
+                )
+
+            case 'gallery_images':
+            case 'json_metadata':
+            case 'repeater_data': {
+                const value = item[colKey]
+                const text = Array.isArray(value) || (value && typeof value === 'object')
+                    ? JSON.stringify(value)
+                    : value || ''
+                return <span className="block max-w-[190px] truncate text-xs font-mono text-muted-foreground" title={text}>{text || '—'}</span>
+            }
+
+            case 'created_at':
+            case 'updated_at':
+                if (!item[colKey]) return <span className="text-muted-foreground text-xs">N/A</span>
+                return <span className="text-xs text-muted-foreground font-mono">{String(item[colKey]).replace('T', ' ').substring(0, 19)}</span>
 
             default:
                 return item[colKey]

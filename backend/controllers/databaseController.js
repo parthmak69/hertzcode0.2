@@ -204,6 +204,40 @@ const TABLE_SCHEMAS = {
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `,
+  master_form_inputs: `
+    CREATE TABLE IF NOT EXISTS \`master_form_inputs\` (
+      \`id\` int(11) NOT NULL PRIMARY KEY AUTO_INCREMENT,
+      \`text_title\` varchar(255) NOT NULL,
+      \`slug\` varchar(255) NOT NULL,
+      \`email\` varchar(255) NOT NULL,
+      \`password_hash\` varchar(255) NOT NULL,
+      \`website_url\` varchar(2048) DEFAULT NULL,
+      \`phone\` varchar(20) DEFAULT NULL,
+      \`integer_qty\` int(11) NOT NULL DEFAULT 1,
+      \`decimal_price\` decimal(10,2) NOT NULL DEFAULT 0.00,
+      \`tax_percentage\` decimal(5,2) NOT NULL DEFAULT 0.00,
+      \`range_slider_value\` int(11) NOT NULL DEFAULT 50,
+      \`short_notes\` text DEFAULT NULL,
+      \`rich_wysiwyg_content\` text DEFAULT NULL,
+      \`dropdown_selection\` varchar(50) NOT NULL DEFAULT 'standard',
+      \`radio_selection\` varchar(50) NOT NULL DEFAULT 'credit_card',
+      \`checkbox_toggle\` tinyint(1) NOT NULL DEFAULT 0,
+      \`switch_active\` tinyint(1) NOT NULL DEFAULT 1,
+      \`date_picker\` date DEFAULT NULL,
+      \`datetime_picker\` datetime DEFAULT NULL,
+      \`time_picker\` time DEFAULT NULL,
+      \`primary_image_url\` varchar(500) DEFAULT NULL,
+      \`document_file_url\` varchar(500) DEFAULT NULL,
+      \`gallery_images\` longtext DEFAULT NULL,
+      \`multi_select_tags\` longtext DEFAULT NULL,
+      \`json_metadata\` longtext DEFAULT NULL,
+      \`repeater_data\` longtext DEFAULT NULL,
+      \`created_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updated_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    INSERT INTO \`master_form_inputs\` (\`text_title\`, \`slug\`, \`email\`, \`password_hash\`, \`website_url\`, \`phone\`, \`integer_qty\`, \`decimal_price\`, \`tax_percentage\`, \`range_slider_value\`, \`short_notes\`, \`rich_wysiwyg_content\`, \`dropdown_selection\`, \`radio_selection\`, \`checkbox_toggle\`, \`switch_active\`, \`date_picker\`, \`datetime_picker\`, \`time_picker\`, \`primary_image_url\`, \`document_file_url\`, \`gallery_images\`, \`multi_select_tags\`, \`json_metadata\`, \`repeater_data\`) VALUES
+    ('Premium Organic Toor Dal', 'premium-organic-toor-dal', 'catalog-manager@squadera.com', '$2b$12$K1.3zR5gZ6m1O0T.e6jLTu5JtPqgKx/w.kO2Uv4V/9X3y5Z.L/eK2', 'https://squadera.com/products/organic-toor-dal', '+919876543210', 250, 180.00, 5.00, 85, 'Unpolished premium grade lentils sourced from organic farms.', '<h2>Protein-Rich Staples</h2><p>Hand-sorted and rich in nutritional fibers.</p>', 'grocery_staples', 'cod_allowed', 1, 1, '2026-05-18', '2026-05-18 16:30:00', '10:00:00', 'uploads/products/toor_dal_primary.jpg', 'uploads/certificates/organic_certification.pdf', '["uploads/products/toor_dal_g1.jpg", "uploads/products/toor_dal_g2.jpg"]', '["organic", "staples", "protein-rich"]', '{"shelf_life_months": 12}', '[{"min_qty": 10, "price": 170.00}]');
+  `,
   orders: `
     CREATE TABLE IF NOT EXISTS \`orders\` (
       \`id\` int(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,

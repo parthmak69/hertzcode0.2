@@ -1,6 +1,6 @@
 import express from 'express';
-import masterFormController from '../controllers/masterFormController.js';
-import uploadParser from '../middleware/uploadMiddleware.js';
+import masterFormController from '../../controllers/masterFormController.js';
+import uploadParser from '../../middleware/uploadMiddleware.js';
 
 const checkAuth = (req, res, next) => next();
 

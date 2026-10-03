@@ -57,7 +57,7 @@ export const get${pascalName}s = async (req, res) => {
 export const get${pascalName}ById = async (req, res) => {
   try {
     const targetId = req.params.id;
-    if (targetId === '${tableName}' || targetId === '${tableName}s' || targetId === 'admin' || targetId === 'admins') {
+    if (!targetId || targetId === 'undefined' || isNaN(Number(targetId)) || targetId === '${tableName}' || targetId === '${tableName}s' || targetId === 'admin' || targetId === 'admins') {
       return get${pascalName}s(req, res);
     }
     const sql = \`SELECT ${selectClause} FROM \`${tableName}\` t${joinClause} WHERE t.\`${pkName}\` = ?\`;

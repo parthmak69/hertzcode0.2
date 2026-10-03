@@ -713,6 +713,52 @@ function generateControllerCode(file, apiTarget = "admin") {
 
   return `import pool from '../../config/db.js';
 
+// Helper to safely parse JSON strings or return fallback
+function safeJsonParse(val, fallback) {
+  if (val === undefined || val === null) return fallback;
+  if (typeof val === 'object') return val;
+  try {
+    return JSON.parse(val);
+  } catch (e) {
+    return fallback;
+  }
+}
+
+// Helper to format rows with aliases and parsed JSON fields
+function formatRow(r) {
+  if (!r) return null;
+  const titleVal = r.text_title ?? r.title ?? r.name ?? r.full_name ?? (r.fname ? (r.fname + ' ' + (r.lname || '')).trim() : '');
+  const subtitleVal = r.short_notes ?? r.subtitle ?? r.description ?? '';
+  const contentVal = r.rich_wysiwyg_content ?? r.content ?? r.wysiwyg ?? '';
+  const activeVal = r.switch_active === 1 || r.is_active === 1 || r.active === 1 || r.isActive === 1 || r.switch_active === true || r.is_active === true || r.active === true;
+  const primaryImg = r.primary_image_url || r.image_url || r.photo || r.image || '';
+  const docFile = r.document_file_url || r.file_url || r.file || '';
+
+  return {
+    ...r,
+    text_title: titleVal,
+    title: titleVal,
+    name: titleVal,
+    full_name: titleVal || (r.username ? r.username : 'Admin User'),
+    short_notes: subtitleVal,
+    subtitle: subtitleVal,
+    rich_wysiwyg_content: contentVal,
+    content: contentVal,
+    switch_active: activeVal ? 1 : 0,
+    is_active: activeVal,
+    active: activeVal,
+    primary_image_url: primaryImg,
+    image_url: primaryImg,
+    document_file_url: docFile,
+    file_url: docFile,
+    gallery_images: safeJsonParse(r.gallery_images, []),
+    multi_select_tags: safeJsonParse(r.multi_select_tags, []),
+    json_metadata: safeJsonParse(r.json_metadata, {}),
+    repeater_data: safeJsonParse(r.repeater_data, []),
+    email: r.email || (r.username ? r.username + '@gmail.com' : 'admin@gmail.com')
+  };
+}
+
 // Auto-ensure table exists helper
 async function ensureTable() {
   try {
@@ -726,34 +772,87 @@ async function ensureTable() {
   }
 }
 
-// GET all non-deleted records (Soft delete aware)
+// GET records with search, sort, pagination, and soft-delete awareness
 export async function getRecords(req, res) {
   try {
     await ensureTable();
+    const page = parseInt(req.query.page || '1') || 1;
+    const limit = parseInt(req.query.limit || req.query.per_page || '10') || 10;
+    const offset = (page - 1) * limit;
+    const search = (req.query.search || req.query.q || '').trim();
+    const sortBy = req.query.sort_by || '${pkField}';
+    const sortOrder = (req.query.sort_order || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+    const showDeleted = req.query.deleted === 'true' || req.query.status === 'deleted' || req.query.isDeleted === '1';
+
+    const isJoined = '${fullGetQuery}'.toLowerCase().includes(' join ');
+    const tblPrefix = isJoined ? "\\x60" + '${file.tableName}' + "\\x60." : "";
+
+    const hasSoftDelete = ${file.columns.some(c => c.name === 'isDeleted' || c.name === 'deletedOn') || file.settings?.recycleBin === true ? 'true' : 'false'};
+    if (hasSoftDelete) {
+      if (showDeleted) {
+        whereConditions.push("(" + tblPrefix + "\\x60isDeleted\\x60 = 1 OR " + tblPrefix + "\\x60deletedOn\\x60 IS NOT NULL)");
+      } else {
+        whereConditions.push("(" + tblPrefix + "\\x60deletedOn\\x60 IS NULL AND (" + tblPrefix + "\\x60isDeleted\\x60 = 0 OR " + tblPrefix + "\\x60isDeleted\\x60 IS NULL))");
+      }
+    }
+
+    if (search) {
+      whereConditions.push("CONCAT_WS(' ', " + tblPrefix + "\\x60${pkField}\\x60, IFNULL(" + tblPrefix + "\\x60name\\x60, ''), IFNULL(" + tblPrefix + "\\x60title\\x60, ''), IFNULL(" + tblPrefix + "\\x60text_title\\x60, ''), IFNULL(" + tblPrefix + "\\x60email\\x60, '')) LIKE ?");
+      params.push('%' + search + '%');
+    }
+
+    const whereClause = whereConditions.length > 0 ? " WHERE " + whereConditions.join(' AND ') : "";
+
     try {
-      const isJoined = '${fullGetQuery}'.toLowerCase().includes(' join ');
-      const filterClause = isJoined 
-        ? " WHERE \\x60" + '${file.tableName}' + "\\x60.\\x60deletedOn\\x60 IS NULL AND (\\x60" + '${file.tableName}' + "\\x60.\\x60isDeleted\\x60 = 0 OR \\x60" + '${file.tableName}' + "\\x60.\\x60isDeleted\\x60 IS NULL)" 
-        : " WHERE \\x60deletedOn\\x60 IS NULL AND (\\x60isDeleted\\x60 = 0 OR \\x60isDeleted\\x60 IS NULL)";
-      const [rows] = await pool.query('${fullGetQuery}' + filterClause + " ORDER BY \\x60" + '${file.tableName}' + "\\x60.\\x60" + '${pkField}' + "\\x60 DESC");
-      const formatted = rows.map(r => ({
-        ...r,
-        full_name: r.full_name || r.name || (r.fname ? (r.fname + ' ' + (r.lname || '')).trim() : (r.username || 'Admin User')),
-        email: r.email || (r.username ? r.username + '@gmail.com' : 'admin@gmail.com')
-      }));
-      return res.json({ success: true, data: formatted });
+      // Total count query
+      let countQuery = "SELECT COUNT(*) as total FROM \\x60" + '${file.tableName}' + "\\x60" + whereClause;
+      let totalItems = 0;
+      try {
+        const [countRows] = await pool.query(countQuery, params);
+        totalItems = countRows[0]?.total || 0;
+      } catch (countErr) {
+        // Fallback count
+        const [rawRows] = await pool.query("SELECT COUNT(*) as total FROM \\x60" + '${file.tableName}' + "\\x60");
+        totalItems = rawRows[0]?.total || 0;
+      }
+
+      // Main paginated query
+      const safeSortCol = sortBy.replace(/[^a-zA-Z0-9_]/g, '') || '${pkField}';
+      const selectQuery = "${fullGetQuery}" + whereClause + " ORDER BY " + tblPrefix + "\\x60" + safeSortCol + "\\x60 " + sortOrder + " LIMIT ? OFFSET ?";
+      const [rows] = await pool.query(selectQuery, [...params, limit, offset]);
+
+      const formatted = rows.map(formatRow);
+      return res.json({
+        success: true,
+        data: formatted,
+        meta: {
+          pagination: {
+            totalItems: totalItems,
+            totalPages: Math.ceil(totalItems / limit) || 1,
+            currentPage: page,
+            itemsPerPage: limit
+          }
+        }
+      });
     } catch (queryErr) {
-      console.error('[Categories GET Error]:', queryErr.message);
+      console.error('[CRUD GET Error]:', queryErr.message);
       try {
         const [rows] = await pool.query('${fullGetQuery}');
-        const formatted = rows.map(r => ({
-          ...r,
-          full_name: r.full_name || r.name || (r.fname ? (r.fname + ' ' + (r.lname || '')).trim() : (r.username || 'Admin User')),
-          email: r.email || (r.username ? r.username + '@gmail.com' : 'admin@gmail.com')
-        }));
-        return res.json({ success: true, data: formatted });
+        const formatted = rows.map(formatRow);
+        return res.json({
+          success: true,
+          data: formatted,
+          meta: {
+            pagination: {
+              totalItems: formatted.length,
+              totalPages: 1,
+              currentPage: 1,
+              itemsPerPage: formatted.length || 10
+            }
+          }
+        });
       } catch (fallbackErr) {
-        console.error('[Categories GET Fallback Error]:', fallbackErr.message);
+        console.error('[CRUD GET Fallback Error]:', fallbackErr.message);
         return res.status(500).json({ success: false, error: fallbackErr.message });
       }
     }
@@ -767,20 +866,14 @@ export async function getRecords(req, res) {
 export async function getRecordById(req, res) {
   try {
     const id = req.params.id;
-    if (id === '${file.tableName}' || id === '${file.tableName}s' || id === 'admin' || id === 'admins') {
+    if (!id || id === 'undefined' || isNaN(Number(id)) || id === '${file.tableName}' || id === '${file.tableName}s' || id === '${file.name}' || id === '${file.name.replace(/_/g, '-')}' || id === '${file.name.replace(/-/g, '_')}' || id === 'admin' || id === 'admins' || id === 'bulk-delete') {
       return getRecords(req, res);
     }
     const [rows] = await pool.query("SELECT * FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60" + '${pkField}' + "\\x60 = ?", [id]);
     if (rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Record not found' });
     }
-    const r = rows[0];
-    const formatted = {
-      ...r,
-      full_name: r.full_name || r.name || (r.fname ? (r.fname + ' ' + (r.lname || '')).trim() : (r.username || 'Admin User')),
-      email: r.email || (r.username ? r.username + '@gmail.com' : 'admin@gmail.com')
-    };
-    return res.json({ success: true, data: formatted });
+    return res.json({ success: true, data: formatRow(rows[0]) });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -792,46 +885,48 @@ export async function createRecord(req, res) {
     await ensureTable();
     const body = { ...(req.body || {}) };
     
-    // Normalize aliases for category parent ID, images, etc.
-    if (body.parentId !== undefined && body.parent_id === undefined) {
-      body.parent_id = body.parentId;
-    }
-    if (body.imageUrl !== undefined && body.image_url === undefined) {
-      body.image_url = body.imageUrl;
-    }
-    if (body.primary_image_url !== undefined) {
-      body.image_url = body.primary_image_url;
-    }
+    // Normalize aliases
+    if (body.parentId !== undefined && body.parent_id === undefined) body.parent_id = body.parentId;
+    if (body.imageUrl !== undefined && body.image_url === undefined) body.image_url = body.imageUrl;
+    if (body.primary_image_url !== undefined) body.image_url = body.primary_image_url;
     if (body.primaryImageAction === 'remove') {
       body.image_url = '';
       body.profile_image = '';
       body.primary_image_url = '';
     }
+    if (body.documentFileAction === 'remove') {
+      body.document_file_url = '';
+      body.file_url = '';
+    }
 
-    // Auto-fill Audit Columns (User Email & Created Date)
+    // Stringify JSON array/object structures before insertion
+    ['gallery_images', 'multi_select_tags', 'json_metadata', 'repeater_data'].forEach(jsonKey => {
+      if (body[jsonKey] !== undefined && typeof body[jsonKey] === 'object') {
+        body[jsonKey] = JSON.stringify(body[jsonKey]);
+      }
+    });
+
+    // Auto-fill Audit Columns
     const currentUserEmail = req.user?.email || req.user?.username || req.headers["x-user-name"] || "admin@hertzcode.com";
-    if (!body.createdBy && !body.created_by) {
-      body.createdBy = currentUserEmail;
-    }
+    if (!body.createdBy && !body.created_by) body.createdBy = currentUserEmail;
     const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    if (!body.createdOn && !body.created_on && !body.created_at) {
-      body.createdOn = nowStr;
-    }
+    if (!body.createdOn && !body.created_on && !body.created_at) body.createdOn = nowStr;
 
     const validEntries = Object.entries(body).filter(([k, v]) => 
       !k.includes('_file') && 
       k !== 'primaryImageAction' && 
+      k !== 'documentFileAction' && 
       k !== 'parentId' &&
       !(k === '${pkField}' && (v === null || v === '' || v === undefined))
     );
     
     if (validEntries.length === 0) {
-      const fallbackName = req.query.name || body.name || 'New Item';
+      const fallbackName = req.query.name || body.name || body.text_title || body.title || 'New Item';
       try {
         const [result] = await pool.execute("INSERT INTO \\x60" + '${file.tableName}' + "\\x60 (\\x60name\\x60) VALUES (?)", [fallbackName]);
         return res.json({ success: true, insertId: result.insertId });
       } catch(e) {
-        return res.json({ success: true, insertId: 1 });
+        return res.status(500).json({ success: false, error: 'Failed to create fallback entry: ' + e.message });
       }
     }
 
@@ -847,7 +942,6 @@ export async function createRecord(req, res) {
       const [result] = await pool.execute(query, values);
       return res.json({ success: true, insertId: result.insertId });
     } catch (err) {
-      // Auto-heal missing columns or missing default values if table already exists in MySQL
       if (err.code === 'ER_BAD_FIELD_ERROR' || err.errno === 1054 || (err.message && err.message.includes('Unknown column'))) {
         try {
           const [cols] = await pool.query("SHOW COLUMNS FROM \\x60" + '${file.tableName}' + "\\x60");
@@ -871,29 +965,10 @@ export async function createRecord(req, res) {
         (err.message && (err.message.includes("doesn't have a default value") || err.message.includes('cannot be null')))
       ) {
         try {
-          const match = err.message ? err.message.match(/Field '([^']+)'|Column '([^']+)'/i) : null;
-          const missingCol = match ? (match[1] || match[2]) : null;
-          if (missingCol) {
-            await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + missingCol + "\\x60 TEXT NULL DEFAULT NULL");
+          const [cols] = await pool.query("SHOW COLUMNS FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60Null\\x60 = 'NO' AND \\x60Extra\\x60 NOT LIKE '%auto_increment%' AND \\x60Default\\x60 IS NULL AND \\x60Key\\x60 != 'PRI'");
+          for (const c of cols) {
+            await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + c.Field + "\\x60 TEXT NULL DEFAULT NULL");
           }
-          // Also alter any other NOT NULL columns without default values to NULL DEFAULT NULL
-          try {
-            const [cols] = await pool.query("SHOW COLUMNS FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60Null\\x60 = 'NO' AND \\x60Extra\\x60 NOT LIKE '%auto_increment%' AND \\x60Default\\x60 IS NULL AND \\x60Key\\x60 != 'PRI'");
-            for (const c of cols) {
-              await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + c.Field + "\\x60 TEXT NULL DEFAULT NULL");
-            }
-          } catch(e) {}
-
-          const [retryResult] = await pool.execute(query, values);
-          return res.json({ success: true, insertId: retryResult.insertId });
-        } catch (alterErr) {
-          return res.status(500).json({ success: false, error: alterErr.message });
-        }
-      } else if (err.code === 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD' || err.errno === 1366 || (err.message && err.message.includes('Incorrect integer value'))) {
-        try {
-          const match = err.message.match(/column '([^']+)'/i);
-          const colName = match ? match[1] : 'createdBy';
-          await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + colName + "\\x60 VARCHAR(255) NULL DEFAULT NULL");
           const [retryResult] = await pool.execute(query, values);
           return res.json({ success: true, insertId: retryResult.insertId });
         } catch (alterErr) {
@@ -914,30 +989,39 @@ export async function updateRecord(req, res) {
     if (id === 'change-password' || id === 'change_password') {
       return changePassword(req, res);
     }
+    if (req.body?.action === 'restore') {
+      return patchRecordStatus(req, res);
+    }
     const body = { ...(req.body || {}) };
     
     if (!id) {
       return res.status(400).json({ success: false, error: 'Record ID is required' });
     }
 
-    if (body.parentId !== undefined && body.parent_id === undefined) {
-      body.parent_id = body.parentId;
-    }
-    if (body.imageUrl !== undefined && body.image_url === undefined) {
-      body.image_url = body.imageUrl;
-    }
-    if (body.primary_image_url !== undefined) {
-      body.image_url = body.primary_image_url;
-    }
+    if (body.parentId !== undefined && body.parent_id === undefined) body.parent_id = body.parentId;
+    if (body.imageUrl !== undefined && body.image_url === undefined) body.image_url = body.imageUrl;
+    if (body.primary_image_url !== undefined) body.image_url = body.primary_image_url;
     if (body.primaryImageAction === 'remove') {
       body.image_url = '';
       body.profile_image = '';
       body.primary_image_url = '';
     }
+    if (body.documentFileAction === 'remove') {
+      body.document_file_url = '';
+      body.file_url = '';
+    }
+
+    // Stringify JSON array/object structures before updating
+    ['gallery_images', 'multi_select_tags', 'json_metadata', 'repeater_data'].forEach(jsonKey => {
+      if (body[jsonKey] !== undefined && typeof body[jsonKey] === 'object') {
+        body[jsonKey] = JSON.stringify(body[jsonKey]);
+      }
+    });
 
     const validEntries = Object.entries(body).filter(([k]) => 
       !k.includes('_file') && 
       k !== 'primaryImageAction' && 
+      k !== 'documentFileAction' && 
       k !== 'parentId' &&
       k !== '${pkField}'
     );
@@ -972,18 +1056,6 @@ export async function updateRecord(req, res) {
         } catch (alterErr) {
           return res.status(500).json({ success: false, error: alterErr.message });
         }
-      } else if (err.code === 'ER_NO_DEFAULT_FOR_FIELD' || err.errno === 1364 || (err.message && err.message.includes("doesn't have a default value"))) {
-        try {
-          const match = err.message.match(/Field '([^']+)'/);
-          const missingCol = match ? match[1] : null;
-          if (missingCol) {
-            await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + missingCol + "\\x60 INT NULL DEFAULT NULL");
-          }
-          const [retryResult] = await pool.execute(query, [...values, id]);
-          return res.json({ success: true, affectedRows: retryResult.affectedRows });
-        } catch (alterErr) {
-          return res.status(500).json({ success: false, error: alterErr.message });
-        }
       }
       throw err;
     }
@@ -992,30 +1064,100 @@ export async function updateRecord(req, res) {
   }
 }
 
-// SOFT DELETE a record (Set deletedOn timestamp)
+// DELETE a record (Supports Soft Delete and Permanent Delete)
 export async function deleteRecord(req, res) {
   try {
     const id = req.query.id || req.params?.id || req.body?.id;
+    const permanent = req.query.permanent === 'true' || req.body?.permanent === true || req.body?.permanent === 'true';
     
     if (!id) {
       return res.status(400).json({ success: false, error: 'Record ID is required' });
     }
 
-    try {
-      const query = "UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1, \\x60deletedOn\\x60 = CURRENT_TIMESTAMP WHERE \\x60" + '${pkField}' + "\\x60 = ?";
+    if (permanent) {
+      const query = "DELETE FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60" + '${pkField}' + "\\x60 = ?";
       const [result] = await pool.execute(query, [id]);
-      return res.json({ success: true, affectedRows: result.affectedRows });
-    } catch (e) {
-      // Fallback if isDeleted or deletedOn column doesn't exist
+      return res.json({ success: true, message: 'Record permanently deleted', affectedRows: result.affectedRows });
+    } else {
       try {
-        await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60isDeleted\\x60 TINYINT(1) DEFAULT 0, ADD COLUMN \\x60deletedOn\\x60 DATETIME NULL DEFAULT NULL");
         const query = "UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1, \\x60deletedOn\\x60 = CURRENT_TIMESTAMP WHERE \\x60" + '${pkField}' + "\\x60 = ?";
         const [result] = await pool.execute(query, [id]);
-        return res.json({ success: true, affectedRows: result.affectedRows });
-      } catch (fallbackErr) {
-        return res.status(500).json({ success: false, error: fallbackErr.message });
+        return res.json({ success: true, message: 'Record moved to trash', affectedRows: result.affectedRows });
+      } catch (e) {
+        try {
+          await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60isDeleted\\x60 TINYINT(1) DEFAULT 0, ADD COLUMN \\x60deletedOn\\x60 DATETIME NULL DEFAULT NULL");
+          const query = "UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1, \\x60deletedOn\\x60 = CURRENT_TIMESTAMP WHERE \\x60" + '${pkField}' + "\\x60 = ?";
+          const [result] = await pool.execute(query, [id]);
+          return res.json({ success: true, message: 'Record moved to trash', affectedRows: result.affectedRows });
+        } catch (fallbackErr) {
+          const query = "DELETE FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60" + '${pkField}' + "\\x60 = ?";
+          const [result] = await pool.execute(query, [id]);
+          return res.json({ success: true, message: 'Record deleted', affectedRows: result.affectedRows });
+        }
       }
     }
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+// Bulk Delete Handler
+export async function bulkDeleteRecords(req, res) {
+  try {
+    const ids = req.body?.ids || req.body?.selectedIds || [];
+    const permanent = req.query.permanent === 'true' || req.body?.permanent === true || req.body?.permanent === 'true';
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'No record IDs provided for bulk deletion.' });
+    }
+
+    const placeholders = ids.map(() => '?').join(', ');
+    if (permanent) {
+      const [result] = await pool.query("DELETE FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60" + '${pkField}' + "\\x60 IN (" + placeholders + ")", ids);
+      return res.json({ success: true, message: 'Records permanently deleted', affectedRows: result.affectedRows });
+    } else {
+      try {
+        const [result] = await pool.query("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1, \\x60deletedOn\\x60 = CURRENT_TIMESTAMP WHERE \\x60" + '${pkField}' + "\\x60 IN (" + placeholders + ")", ids);
+        return res.json({ success: true, message: 'Records moved to trash', affectedRows: result.affectedRows });
+      } catch (e) {
+        await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60isDeleted\\x60 TINYINT(1) DEFAULT 0, ADD COLUMN \\x60deletedOn\\x60 DATETIME NULL DEFAULT NULL").catch(() => {});
+        const [result] = await pool.query("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1, \\x60deletedOn\\x60 = CURRENT_TIMESTAMP WHERE \\x60" + '${pkField}' + "\\x60 IN (" + placeholders + ")", ids);
+        return res.json({ success: true, message: 'Records moved to trash', affectedRows: result.affectedRows });
+      }
+    }
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+// PATCH status toggle or restore handler
+export async function patchRecordStatus(req, res) {
+  try {
+    const id = req.params?.id || req.body?.id;
+    if (req.body?.action === 'restore') {
+      await pool.query("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 0, \\x60deletedOn\\x60 = NULL WHERE \\x60" + '${pkField}' + "\\x60 = ?", [id]);
+      return res.json({ success: true, message: 'Record restored successfully.' });
+    }
+
+    // Toggle active status switch
+    const [rows] = await pool.query("SELECT * FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60" + '${pkField}' + "\\x60 = ? LIMIT 1", [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Record not found.' });
+    }
+    const cur = rows[0];
+    const curStatus = cur.switch_active !== undefined ? cur.switch_active : (cur.isActive !== undefined ? cur.isActive : cur.is_active);
+    const newStatus = (curStatus === 1 || curStatus === true) ? 0 : 1;
+
+    try {
+      await pool.query("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60switch_active\\x60 = ? WHERE \\x60" + '${pkField}' + "\\x60 = ?", [newStatus, id]);
+    } catch(e) {
+      try {
+        await pool.query("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isActive\\x60 = ? WHERE \\x60" + '${pkField}' + "\\x60 = ?", [newStatus, id]);
+      } catch(e2) {
+        await pool.query("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60is_active\\x60 = ? WHERE \\x60" + '${pkField}' + "\\x60 = ?", [newStatus, id]);
+      }
+    }
+    return res.json({ success: true, message: 'Status updated successfully.', data: { active: newStatus === 1 } });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -1061,18 +1203,72 @@ export async function changePassword(req, res) {
 
 // Generate Express Router configuration mapping paths to MVC controllers
 function generateRouterCode(file, apiTarget = "admin") {
+  const hyphenName = file.name.replace(/_/g, '-');
+  const underscoreName = file.name.replace(/-/g, '_');
+  const singularName = file.name.endsWith('s') ? file.name.slice(0, -1) : file.name;
+  const pluralName = file.name.endsWith('s') ? file.name : file.name + 's';
+  const hyphenPlural = pluralName.replace(/_/g, '-');
+  const underscorePlural = pluralName.replace(/-/g, '_');
+
+  const basePaths = JSON.stringify(Array.from(new Set([
+    '/',
+    `/${file.name}`,
+    `/${hyphenName}`,
+    `/${underscoreName}`,
+    `/${singularName}`,
+    `/${pluralName}`,
+    `/${hyphenPlural}`,
+    `/${underscorePlural}`,
+    '/admin',
+    '/admins'
+  ])));
+
+  const idPaths = JSON.stringify(Array.from(new Set([
+    '/:id',
+    `/${file.name}/:id`,
+    `/${hyphenName}/:id`,
+    `/${underscoreName}/:id`,
+    `/${singularName}/:id`,
+    `/${pluralName}/:id`,
+    `/${hyphenPlural}/:id`,
+    `/${underscorePlural}/:id`
+  ])));
+
+  const bulkPaths = JSON.stringify(Array.from(new Set([
+    '/bulk-delete',
+    '/bulk_delete',
+    `/${file.name}/bulk-delete`,
+    `/${hyphenName}/bulk-delete`,
+    `/${underscoreName}/bulk-delete`,
+    `/${pluralName}/bulk-delete`,
+    `/${hyphenPlural}/bulk-delete`
+  ])));
+
+  const statusPaths = JSON.stringify(Array.from(new Set([
+    '/:id',
+    '/:id/status',
+    `/${file.name}/:id`,
+    `/${hyphenName}/:id`,
+    `/${underscoreName}/:id`,
+    `/${file.name}/:id/status`,
+    `/${hyphenName}/:id/status`,
+    `/${underscoreName}/:id/status`
+  ])));
+
   return `import express from 'express';
-import { getRecords, getRecordById, createRecord, updateRecord, deleteRecord, changePassword } from '../../controllers/${apiTarget}/${file.name}Controller.js';
+import { getRecords, getRecordById, createRecord, updateRecord, deleteRecord, bulkDeleteRecords, patchRecordStatus, changePassword } from '../../controllers/${apiTarget}/${file.name}Controller.js';
 
 const router = express.Router();
 
 router.put(['/change-password', '/change_password', '/api/admin/change-password'], changePassword);
+router.post(${bulkPaths}, bulkDeleteRecords);
 
-router.get(['/', '/${file.name}', '/${file.name}s', '/admin', '/admins'], getRecords);
-router.get('/:id', getRecordById);
-router.post(['/', '/${file.name}', '/${file.name}s', '/admin', '/admins'], createRecord);
-router.put(['/', '/:id', '/${file.name}/:id', '/${file.name}s/:id'], updateRecord);
-router.delete(['/', '/:id', '/${file.name}/:id', '/${file.name}s/:id'], deleteRecord);
+router.get(${basePaths}, getRecords);
+router.get(${idPaths}, getRecordById);
+router.post(${basePaths}, createRecord);
+router.put(${idPaths}, updateRecord);
+router.delete(${idPaths}, deleteRecord);
+router.patch(${statusPaths}, patchRecordStatus);
 
 export default router;
 `;
@@ -1205,10 +1401,11 @@ function initializeBoilerplate(targetDir, project) {
   const dbContent = `import mysql from 'mysql2/promise';
 
 const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
+  host: process.env.DB_HOST === 'localhost' ? '127.0.0.1' : (process.env.DB_HOST || '127.0.0.1'),
+  port: parseInt(process.env.DB_PORT || '3306'),
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: '${realDbName}',
+  database: process.env.DB_NAME || '${realDbName}',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
@@ -1379,8 +1576,63 @@ app.get(['/testing/fake-data', '/api/testing/fake-data'], (req, res) => {
     { name: 'Modern Home & Kitchen', description: 'Furniture, decor, kitchen tools, and smart home appliances.', image_url: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=600&q=80' },
     { name: 'Fashion & Urban Wear', description: 'Trending men and women clothing, footwear, and fashion accessories.', image_url: 'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=600&q=80' }
   ];
+
+  if (type === 'master' || type === 'master_form' || type === 'master_form_inputs') {
+    const category = req.query.category || 'grocery_staples';
+    const sampleProducts = [
+      { title: 'Organic Whole Grain Rolled Oats 1kg', cat: 'grocery_staples', price: 14.99, tag: 'organic' },
+      { title: 'Extra Virgin Cold-Pressed Olive Oil 750ml', cat: 'grocery_staples', price: 24.50, tag: 'best-seller' },
+      { title: '50% OFF Festive Holiday Mega Savings Pass', cat: 'coupons_promos', price: 0.00, tag: 'discount' },
+      { title: 'Authorized Enterprise Cloud Solutions Partner', cat: 'crm_vendor', price: 499.00, tag: 'verified-dealer' },
+      { title: 'Global SSL Encryption & High-Availability Proxy', cat: 'system_configs', price: 120.00, tag: 'restricted-access' }
+    ];
+    const match = sampleProducts.find(p => p.cat === category) || sampleProducts[Math.floor(Math.random() * sampleProducts.length)];
+    const title = match.title;
+    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const datetimeStr = now.toISOString().replace('T', ' ').substring(0, 19);
+
+    return res.json({
+      success: true,
+      data: {
+        text_title: title,
+        slug: slug,
+        email: 'contact.' + slug.substring(0, 8) + '@example.com',
+        password_hash: 'DemoPass@1234',
+        website_url: 'https://example.com/items/' + slug,
+        phone: '+1 555-' + Math.floor(1000000 + Math.random() * 9000000),
+        integer_qty: Math.floor(Math.random() * 100) + 5,
+        decimal_price: match.price || parseFloat((Math.random() * 80 + 10).toFixed(2)),
+        tax_percentage: 18.00,
+        range_slider_value: Math.floor(Math.random() * 80) + 10,
+        short_notes: 'Curated ' + title + ' suitable for testing admin data pipelines, filters, and reports.',
+        rich_wysiwyg_content: '<h3>' + title + '</h3><p>This master form entry was automatically populated with high quality dummy test data. All input attributes including dates, sliders, tags, and media previews are pre-filled.</p>',
+        dropdown_selection: category,
+        radio_selection: 'credit_card',
+        checkbox_toggle: 1,
+        switch_active: 1,
+        date_picker: dateStr,
+        datetime_picker: datetimeStr,
+        time_picker: '12:00:00',
+        primary_image_url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80',
+        document_file_url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+        gallery_images: [
+          'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=600&q=80',
+          'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80'
+        ],
+        multi_select_tags: [match.tag, 'best-seller', 'staples'],
+        json_metadata: {
+          brand: 'OmniMaster Pro',
+          warranty: '2 Years',
+          certified: true
+        }
+      }
+    });
+  }
+
   const randomCat = fakeCategories[Math.floor(Math.random() * fakeCategories.length)];
-  res.json({ success: true, data: type === 'category' ? randomCat : randomCat });
+  res.json({ success: true, data: randomCat });
 });
 
 // Storage quota status endpoint used by Admin templates
@@ -1452,13 +1704,19 @@ export async function loadMvcRoutes() {
               aliases.add('master_form');
               aliases.add('masterform');
               aliases.add('forms');
+              aliases.add('master_form_inputs');
+              aliases.add('master-form-inputs');
+              aliases.add('master_forms');
+              aliases.add('master-forms');
             }
 
             aliases.forEach(name => {
               app.use('/api/' + apiPrefix + '/' + name, router);
               app.use('/api/admin/' + name, router);
               app.use('/admin/' + name, router);
-              app.use('/api/' + name, router);
+              if (name !== 'admin' && name !== 'customer') {
+                app.use('/api/' + name, router);
+              }
             });
             console.log('[MVC ROUTE] Registered ' + file + ' (aliases: ' + Array.from(aliases).join(', ') + ')');
           } catch (err) {
@@ -1530,6 +1788,7 @@ startServer();
 
   // Always copy/sync core UI components and Auth files from template to target project
   const syncFiles = [
+    { src: path.join(templateSource, "components", "forms", "MasterForm.jsx"), dest: path.join(adminDir, "components", "forms", "MasterForm.jsx") },
     { src: path.join(templateSource, "components", "ui", "DataTable.jsx"), dest: path.join(adminDir, "components", "ui", "DataTable.jsx") },
     { src: path.join(templateSource, "app", "login", "page.jsx"), dest: path.join(adminDir, "app", "login", "page.jsx") },
     { src: path.join(templateSource, "utils", "api.js"), dest: path.join(adminDir, "utils", "api.js") },

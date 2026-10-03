@@ -252,6 +252,15 @@ async function request(endpoint, options = {}, _retry = false) {
         }
     }
 
+    if (!res.ok && json.success === undefined) {
+        return {
+            success: false,
+            message: json.message || `Request failed with status ${res.status} (${res.statusText || 'Error'})`,
+            status: res.status,
+            ...json
+        }
+    }
+
     return json
 }
 

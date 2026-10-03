@@ -22,6 +22,7 @@ const QUICK_TABLE_OPTIONS = [
   { id: "image_category", name: "image_category" },
   { id: "images", name: "images" },
   { id: "login_activity", name: "login_activity" },
+  { id: "master_form_inputs", name: "master_form_inputs" },
   { id: "order_items", name: "order_items" },
   { id: "orders", name: "orders" },
   { id: "product", name: "product" },
