@@ -8,37 +8,23 @@ import { databaseService } from "../../services/databaseService";
 const DatabaseContext = createContext();
 
 export function DatabaseProvider({ children }) {
-  const { currentUser } = useAuth();
+  const { currentUser, currentUserRole } = useAuth();
   const [databases, setDatabases] = useState([]);
   const [activeDatabase, setActiveDatabase] = useState(null);
 
-  const fetchDatabasesList = async (user) => {
+  const fetchDatabasesList = async (user, role) => {
     if (!user) return;
     try {
-      const data = await databaseService.getDatabases(user);
+      const data = await databaseService.getDatabases(user, role);
       if (data.success) {
         const serverDbs = data.databases || [];
-        const serverDbNames = serverDbs.map((db) => db.name);
-        
-        const localDbsRaw = localStorage.getItem("localDatabases") || "";
-        const localDbs = localDbsRaw ? localDbsRaw.split(",").filter(Boolean) : [];
-        
         const merged = serverDbs.map((db) => ({
           id: db.name,
           name: db.name,
           owner: db.owner,
+          tablesCount: db.tablesCount,
           tables: [],
         }));
-        
-        for (const localDb of localDbs) {
-          if (!serverDbNames.includes(localDb)) {
-            merged.push({
-              id: localDb,
-              name: localDb,
-              tables: [],
-            });
-          }
-        }
         setDatabases(merged);
       }
     } catch (err) {
@@ -48,12 +34,12 @@ export function DatabaseProvider({ children }) {
 
   useEffect(() => {
     if (currentUser) {
-      fetchDatabasesList(currentUser);
+      fetchDatabasesList(currentUser, currentUserRole);
     } else {
       setDatabases([]);
       setActiveDatabase(null);
     }
-  }, [currentUser]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, currentUserRole]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   return (
     <DatabaseContext.Provider

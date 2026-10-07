@@ -787,6 +787,9 @@ export async function getRecords(req, res) {
     const isJoined = '${fullGetQuery}'.toLowerCase().includes(' join ');
     const tblPrefix = isJoined ? "\\x60" + '${file.tableName}' + "\\x60." : "";
 
+    const whereConditions = [];
+    const params = [];
+
     const hasSoftDelete = ${file.columns.some(c => c.name === 'isDeleted' || c.name === 'deletedOn') || file.settings?.recycleBin === true ? 'true' : 'false'};
     if (hasSoftDelete) {
       if (showDeleted) {
@@ -1198,6 +1201,121 @@ export async function changePassword(req, res) {
     return res.status(500).json({ success: false, error: err.message });
   }
 }
+
+// Bulk Import Handler
+export async function bulkImportRecords(req, res) {
+  try {
+    await ensureTable();
+    const records = req.body?.records || req.body?.rows || req.body?.data || (Array.isArray(req.body) ? req.body : []);
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ success: false, message: 'No records provided for bulk import.' });
+    }
+
+    let colNames = new Set();
+    try {
+      const [colRows] = await pool.query("SHOW COLUMNS FROM \\x60" + '${file.tableName}' + "\\x60");
+      colNames = new Set(colRows.map(c => c.Field));
+    } catch(e) {}
+
+    let inserted = 0;
+    let lastError = null;
+
+    for (const item of records) {
+      const body = { ...item };
+
+      // Normalization of common aliases to match table schema
+      if (colNames.has('text_title') && !body.text_title) {
+        body.text_title = body.title || body.name || body.record_name || body.full_name || 'Untitled';
+      }
+      if (colNames.has('title') && !body.title) {
+        body.title = body.text_title || body.name || body.record_name || 'Untitled';
+      }
+      if (colNames.has('name') && !body.name) {
+        body.name = body.text_title || body.title || body.full_name || 'Untitled';
+      }
+      if (colNames.has('slug') && !body.slug && (body.text_title || body.title || body.name)) {
+        const src = body.text_title || body.title || body.name;
+        body.slug = String(src).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      }
+      if (colNames.has('password_hash')) {
+        if (!body.password_hash && body.password) {
+          body.password_hash = body.password;
+        } else if (!body.password_hash) {
+          body.password_hash = '$unusable$' + Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+        }
+      } else if (colNames.has('password')) {
+        if (!body.password && body.password_hash) {
+          body.password = body.password_hash;
+        } else if (!body.password) {
+          body.password = '$unusable$' + Math.random().toString(36).substring(2);
+        }
+      }
+      if (colNames.has('switch_active') && body.switch_active === undefined && body.is_active !== undefined) {
+        body.switch_active = body.is_active ? 1 : 0;
+      }
+      if (colNames.has('is_active') && body.is_active === undefined && body.switch_active !== undefined) {
+        body.is_active = body.switch_active ? 1 : 0;
+      }
+
+      // Sanitize ISO Date / Datetime / Time formats for MySQL compatibility
+      Object.keys(body).forEach(k => {
+        let v = body[k];
+        if (typeof v === 'string' && v.includes('T') && !k.includes('json') && !k.includes('meta')) {
+          if (k.includes('datetime')) {
+            body[k] = v.replace('T', ' ').replace('Z', '').split('.')[0];
+          } else if (k.includes('date') || k === 'dob') {
+            body[k] = v.split('T')[0];
+          } else if (k.includes('time')) {
+            body[k] = v.split('T')[1]?.split('.')[0] || v;
+          }
+        }
+      });
+
+      ['gallery_images', 'multi_select_tags', 'json_metadata', 'repeater_data'].forEach(jsonKey => {
+        if (body[jsonKey] !== undefined && typeof body[jsonKey] === 'object' && body[jsonKey] !== null) {
+          body[jsonKey] = JSON.stringify(body[jsonKey]);
+        }
+      });
+
+      const validEntries = Object.entries(body).filter(([k, v]) =>
+        !k.includes('_file') &&
+        k !== '${pkField}' &&
+        v !== undefined && v !== null && v !== '' &&
+        (colNames.size === 0 || colNames.has(k))
+      );
+
+      if (validEntries.length > 0) {
+        const keys = validEntries.map(([k]) => k);
+        const values = validEntries.map(([, v]) => v);
+        const placeholders = keys.map(() => '?').join(', ');
+        const columns = keys.map(k => "\\x60" + k + "\\x60").join(', ');
+        const query = "INSERT INTO \\x60" + '${file.tableName}' + "\\x60 (" + columns + ") VALUES (" + placeholders + ")";
+        try {
+          await pool.execute(query, values);
+          inserted++;
+        } catch(e) {
+          lastError = e.message;
+          console.warn('[Bulk Import Row Error]', e.message);
+        }
+      }
+    }
+
+    if (inserted === 0 && records.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Failed to import records: ' + (lastError || 'No matching table columns found in imported data.')
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: \`Successfully imported \${inserted} of \${records.length} records.\`,
+      count: inserted
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+}
 `;
 }
 
@@ -1244,6 +1362,18 @@ function generateRouterCode(file, apiTarget = "admin") {
     `/${hyphenPlural}/bulk-delete`
   ])));
 
+  const importPaths = JSON.stringify(Array.from(new Set([
+    '/bulk-import',
+    '/bulk_import',
+    `/${file.name}/bulk-import`,
+    `/${hyphenName}/bulk-import`,
+    `/${underscoreName}/bulk-import`,
+    `/${pluralName}/bulk-import`,
+    `/${hyphenPlural}/bulk-import`,
+    `/admin/${file.name}/bulk-import`,
+    `/admin/${hyphenName}/bulk-import`
+  ])));
+
   const statusPaths = JSON.stringify(Array.from(new Set([
     '/:id',
     '/:id/status',
@@ -1256,11 +1386,12 @@ function generateRouterCode(file, apiTarget = "admin") {
   ])));
 
   return `import express from 'express';
-import { getRecords, getRecordById, createRecord, updateRecord, deleteRecord, bulkDeleteRecords, patchRecordStatus, changePassword } from '../../controllers/${apiTarget}/${file.name}Controller.js';
+import { getRecords, getRecordById, createRecord, updateRecord, deleteRecord, bulkDeleteRecords, bulkImportRecords, patchRecordStatus, changePassword } from '../../controllers/${apiTarget}/${file.name}Controller.js';
 
 const router = express.Router();
 
 router.put(['/change-password', '/change_password', '/api/admin/change-password'], changePassword);
+router.post(${importPaths}, bulkImportRecords);
 router.post(${bulkPaths}, bulkDeleteRecords);
 
 router.get(${basePaths}, getRecords);

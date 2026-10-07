@@ -116,6 +116,13 @@ const masterFormModel = {
       cleanFields.dropdown_selection = category;
     }
 
+    // Auto-serialize JSON fields
+    ['gallery_images', 'multi_select_tags', 'json_metadata', 'repeater_data'].forEach(jsonKey => {
+      if (cleanFields[jsonKey] !== undefined && typeof cleanFields[jsonKey] === 'object' && cleanFields[jsonKey] !== null) {
+        cleanFields[jsonKey] = JSON.stringify(cleanFields[jsonKey]);
+      }
+    });
+
     const columns = Object.keys(cleanFields);
     const placeholders = columns.map(() => '?').join(', ');
     const values = Object.values(cleanFields);
@@ -126,15 +133,24 @@ const masterFormModel = {
 
   async updateRecord(id, fields, category, executingUserId = 1) {
     await ensureMasterFormTable(executingUserId);
-    const setClause = Object.keys(fields).map(c => `\`${c}\` = ?`).join(', ');
+    const cleanFields = { ...fields };
+
+    // Auto-serialize JSON fields
+    ['gallery_images', 'multi_select_tags', 'json_metadata', 'repeater_data'].forEach(jsonKey => {
+      if (cleanFields[jsonKey] !== undefined && typeof cleanFields[jsonKey] === 'object' && cleanFields[jsonKey] !== null) {
+        cleanFields[jsonKey] = JSON.stringify(cleanFields[jsonKey]);
+      }
+    });
+
+    const setClause = Object.keys(cleanFields).map(c => `\`${c}\` = ?`).join(', ');
 
     let sql, values;
     if (category) {
       sql = `UPDATE \`master_form_inputs\` SET ${setClause} WHERE \`id\` = ? AND \`dropdown_selection\` = ?`;
-      values = [...Object.values(fields), id, category];
+      values = [...Object.values(cleanFields), id, category];
     } else {
       sql = `UPDATE \`master_form_inputs\` SET ${setClause} WHERE \`id\` = ?`;
-      values = [...Object.values(fields), id];
+      values = [...Object.values(cleanFields), id];
     }
 
     return dbQuery(sql, values, executingUserId, `Updated record ID: ${id}`);

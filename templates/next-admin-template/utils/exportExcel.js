@@ -81,7 +81,7 @@ export function downloadTemplate(type) {
             }
         ]
         filename = 'admins_import_template'
-    } else if (type === 'master-form') {
+    } else if (type === 'master-form' || type === 'master_form' || type === 'master_form_inputs') {
         headers = [
             'Record Name',
             'URL Slug',
@@ -95,12 +95,19 @@ export function downloadTemplate(type) {
             'Range Slider Value',
             'Short Notes',
             'Rich Text Content',
+            'Dropdown Selection',
             'Radio Selection',
             'Checkbox Toggle',
             'Active Toggle',
             'Date',
+            'Date & Time',
             'Time',
-            'Tags'
+            'Primary Image URL',
+            'Document File URL',
+            'Tags',
+            'Gallery Images',
+            'JSON Metadata',
+            'Repeater Data'
         ]
         wsData = [
             {
@@ -116,12 +123,19 @@ export function downloadTemplate(type) {
                 'Range Slider Value': 75,
                 'Short Notes': 'Quick notes about the product.',
                 'Rich Text Content': '<p>Detailed description in HTML format.</p>',
+                'Dropdown Selection': 'electronics', // electronics, fashion, groceries, books
                 'Radio Selection': 'credit_card', // credit_card, cod_allowed, online_only, secured_portals
                 'Checkbox Toggle': 'Yes', // Yes / No
                 'Active Toggle': 'Yes', // Yes / No
                 'Date': '2026-06-25', // YYYY-MM-DD
+                'Date & Time': '2026-06-25 14:30:00', // YYYY-MM-DD HH:MM:SS
                 'Time': '14:30:00', // HH:MM:SS
-                'Tags': 'organic, staples' // comma-separated values
+                'Primary Image URL': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
+                'Document File URL': 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+                'Tags': 'organic, staples, premium', // comma-separated values
+                'Gallery Images': '["https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500"]',
+                'JSON Metadata': '{"sku": "PRD-998", "brand": "Apex", "warranty_months": 24}',
+                'Repeater Data': '[{"feature_name": "Fast Shipping", "feature_value": "1-2 Days"}]'
             }
         ]
         filename = 'master_form_import_template'

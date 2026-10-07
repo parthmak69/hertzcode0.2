@@ -3,8 +3,8 @@
 import { api } from "./api";
 
 export const databaseService = {
-  getDatabases: async (username) => {
-    return api.get(`/api/database/list?username=${encodeURIComponent(username)}`);
+  getDatabases: async (username, role = "") => {
+    return api.get(`/api/database/list?username=${encodeURIComponent(username || "")}&role=${encodeURIComponent(role || "")}`);
   },
   createDatabase: async (dbName, dbType, tables = [], username = "") => {
     return api.post("/api/database/create", { dbName, dbType, tables, username });

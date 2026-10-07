@@ -71,33 +71,105 @@ export default function ImportModal({ isOpen, onClose, onImportSuccess, type, im
         const cleanHeader = String(excelHeader).toLowerCase().trim()
         
         if (type === 'admins') {
-            if (['full name', 'fullname', 'name', 'first name', 'last name'].includes(cleanHeader)) return 'Full Name'
-            if (['email', 'mail', 'email address', 'emailid'].includes(cleanHeader)) return 'Email'
-            if (['password', 'pass'].includes(cleanHeader)) return 'Password'
-            if (['phone', 'mobile', 'contact', 'telephone', 'phone number'].includes(cleanHeader)) return 'Phone'
+            if (['full name', 'fullname', 'name', 'first name', 'last name', 'full_name'].includes(cleanHeader)) return 'full_name'
+            if (['email', 'mail', 'email address', 'emailid'].includes(cleanHeader)) return 'email'
+            if (['password', 'pass', 'password_hash'].includes(cleanHeader)) return 'password'
+            if (['phone', 'mobile', 'contact', 'telephone', 'phone number'].includes(cleanHeader)) return 'phone'
+            if (['role', 'user_role'].includes(cleanHeader)) return 'role'
+            return cleanHeader.replace(/[^a-z0-9_]/g, '_')
         } else {
-            if (['record name', 'recordname', 'title', 'text_title', 'name'].includes(cleanHeader)) return 'Record Name'
-            if (['url slug', 'slug'].includes(cleanHeader)) return 'URL Slug'
-            if (['email', 'mail', 'email address'].includes(cleanHeader)) return 'Email'
-            if (['password', 'pass'].includes(cleanHeader)) return 'Password'
-            if (['website url', 'website_url', 'url', 'website'].includes(cleanHeader)) return 'Website URL'
-            if (['phone', 'mobile', 'contact', 'phone number'].includes(cleanHeader)) return 'Phone'
-            if (['qty / stock', 'qty', 'quantity', 'stock', 'integer_qty'].includes(cleanHeader)) return 'Qty / Stock'
-            if (['price (₹)', 'price', 'rate', 'amount', 'cost', 'decimal_price'].includes(cleanHeader)) return 'Price (₹)'
-            if (['tax percentage', 'tax', 'discount', 'percentage'].includes(cleanHeader)) return 'Tax Percentage'
-            if (['range slider value', 'slider', 'rating'].includes(cleanHeader)) return 'Range Slider Value'
-            if (['short notes', 'notes', 'subtitle', 'short_notes'].includes(cleanHeader)) return 'Short Notes'
-            if (['rich text content', 'content', 'description', 'rich_wysiwyg_content'].includes(cleanHeader)) return 'Rich Text Content'
-            if (['radio selection', 'radio', 'radio_selection'].includes(cleanHeader)) return 'Radio Selection'
-            if (['checkbox toggle', 'checkbox', 'checkbox_toggle'].includes(cleanHeader)) return 'Checkbox Toggle'
-            if (['active toggle', 'active', 'switch_active'].includes(cleanHeader)) return 'Active Toggle'
-            if (['date', 'date_picker'].includes(cleanHeader)) return 'Date'
-            if (['time', 'time_picker'].includes(cleanHeader)) return 'Time'
-            if (['tags', 'multi_select_tags'].includes(cleanHeader)) return 'Tags'
-            if (['dropdown selection', 'dropdown', 'dropdown_selection', 'category'].includes(cleanHeader)) return 'Dropdown Selection'
+            if (['record name', 'recordname', 'title', 'text_title', 'name', 'record_name'].includes(cleanHeader)) return 'text_title'
+            if (['url slug', 'slug', 'url_slug'].includes(cleanHeader)) return 'slug'
+            if (['email', 'mail', 'email address'].includes(cleanHeader)) return 'email'
+            if (['password', 'pass', 'password_hash'].includes(cleanHeader)) return 'password'
+            if (['website url', 'website_url', 'url', 'website', 'site'].includes(cleanHeader)) return 'website_url'
+            if (['phone', 'mobile', 'contact', 'phone number'].includes(cleanHeader)) return 'phone'
+            if (['qty / stock', 'qty', 'quantity', 'stock', 'integer_qty'].includes(cleanHeader)) return 'integer_qty'
+            if (['price (₹)', 'price', 'rate', 'amount', 'cost', 'decimal_price'].includes(cleanHeader)) return 'decimal_price'
+            if (['tax percentage', 'tax', 'tax %', 'tax_percentage'].includes(cleanHeader)) return 'tax_percentage'
+            if (['range slider value', 'slider', 'rating', 'range_slider_value'].includes(cleanHeader)) return 'range_slider_value'
+            if (['short notes', 'notes', 'subtitle', 'short_notes'].includes(cleanHeader)) return 'short_notes'
+            if (['rich text content', 'content', 'description', 'rich_wysiwyg_content', 'wysiwyg'].includes(cleanHeader)) return 'rich_wysiwyg_content'
+            if (['radio selection', 'radio', 'radio_selection', 'payment option'].includes(cleanHeader)) return 'radio_selection'
+            if (['checkbox toggle', 'checkbox', 'checkbox_toggle'].includes(cleanHeader)) return 'checkbox_toggle'
+            if (['active toggle', 'active', 'switch_active', 'status'].includes(cleanHeader)) return 'switch_active'
+            if (['date', 'date_picker'].includes(cleanHeader)) return 'date_picker'
+            if (['date & time', 'datetime', 'datetime_picker'].includes(cleanHeader)) return 'datetime_picker'
+            if (['time', 'time_picker'].includes(cleanHeader)) return 'time_picker'
+            if (['tags', 'multi_select_tags', 'tag'].includes(cleanHeader)) return 'multi_select_tags'
+            if (['dropdown selection', 'dropdown', 'dropdown_selection', 'category'].includes(cleanHeader)) return 'dropdown_selection'
+            if (['primary image', 'primary_image_url', 'image', 'photo'].includes(cleanHeader)) return 'primary_image_url'
+            if (['document', 'document_file_url', 'file', 'doc'].includes(cleanHeader)) return 'document_file_url'
+            if (['gallery images', 'gallery_images'].includes(cleanHeader)) return 'gallery_images'
+            if (['metadata', 'json_metadata'].includes(cleanHeader)) return 'json_metadata'
+            if (['repeater data', 'repeater_data'].includes(cleanHeader)) return 'repeater_data'
+            return cleanHeader.replace(/[^a-z0-9_]/g, '_')
         }
-        
-        return excelHeader
+    }
+
+    const formatValueForDb = (dbKey, rawVal) => {
+        if (rawVal === undefined || rawVal === null || rawVal === '') return null
+        if (dbKey === 'checkbox_toggle' || dbKey === 'switch_active') {
+            const s = String(rawVal).toLowerCase().trim()
+            return (s === '1' || s === 'true' || s === 'yes' || s === 'active' || s === 'on') ? 1 : 0
+        }
+        if (dbKey === 'integer_qty' || dbKey === 'range_slider_value') {
+            return parseInt(rawVal) || 0
+        }
+        if (dbKey === 'decimal_price' || dbKey === 'tax_percentage') {
+            return parseFloat(String(rawVal).replace(/[^0-9.-]/g, '')) || 0.0
+        }
+        if (dbKey === 'date_picker' || dbKey.endsWith('_date') || dbKey === 'date') {
+            if (typeof rawVal === 'string') {
+                const s = rawVal.trim()
+                if (s.includes('T')) return s.split('T')[0]
+                const d = new Date(s)
+                if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
+                return s
+            } else if (rawVal instanceof Date) {
+                return rawVal.toISOString().split('T')[0]
+            } else if (typeof rawVal === 'number') {
+                const excelEpoch = new Date((rawVal - (25567 + 2)) * 86400 * 1000)
+                return !isNaN(excelEpoch.getTime()) ? excelEpoch.toISOString().split('T')[0] : String(rawVal)
+            }
+            return String(rawVal).split('T')[0]
+        }
+        if (dbKey === 'datetime_picker' || dbKey.endsWith('_datetime') || dbKey === 'datetime') {
+            if (typeof rawVal === 'string') {
+                const s = rawVal.trim()
+                if (s.includes('T')) return s.replace('T', ' ').replace('Z', '').split('.')[0]
+                return s
+            } else if (rawVal instanceof Date) {
+                return rawVal.toISOString().replace('T', ' ').replace('Z', '').split('.')[0]
+            }
+            return String(rawVal)
+        }
+        if (dbKey === 'time_picker' || dbKey.endsWith('_time') || dbKey === 'time') {
+            if (typeof rawVal === 'string') {
+                const s = rawVal.trim()
+                if (s.includes('T')) return s.split('T')[1]?.split('.')[0] || s
+                return s
+            }
+            return String(rawVal)
+        }
+        if (dbKey === 'multi_select_tags') {
+            if (Array.isArray(rawVal)) return rawVal
+            if (typeof rawVal === 'string') {
+                if (rawVal.trim().startsWith('[')) {
+                    try { return JSON.parse(rawVal) } catch {}
+                }
+                return rawVal.split(',').map(s => s.trim()).filter(Boolean)
+            }
+            return [String(rawVal)]
+        }
+        if (dbKey === 'gallery_images' || dbKey === 'json_metadata' || dbKey === 'repeater_data') {
+            if (typeof rawVal === 'object') return rawVal
+            if (typeof rawVal === 'string' && (rawVal.trim().startsWith('{') || rawVal.trim().startsWith('['))) {
+                try { return JSON.parse(rawVal) } catch {}
+            }
+            return rawVal
+        }
+        return rawVal
     }
 
     // Automatically check headers found in Excel file
@@ -210,23 +282,13 @@ export default function ImportModal({ isOpen, onClose, onImportSuccess, type, im
         setErrorMsg('')
         setSuccessMsg('')
 
-        // Normalize checked headers to check required fields
+        // Ensure at least one usable column exists
         const normalizedHeaders = rawHeaders.map(getNormalizedKey)
 
         if (type === 'admins') {
-            const hasName = normalizedHeaders.includes('Full Name')
-            const hasEmail = normalizedHeaders.includes('Email')
-            const hasPassword = normalizedHeaders.includes('Password')
-            
-            if (!hasName || !hasEmail || !hasPassword) {
-                setErrorMsg("Quick Import failed: Your spreadsheet does not contain required headers (Name, Email, Password). Please use 'Customize Import' to import.")
-                setLoading(false)
-                return
-            }
-        } else {
-            const hasTitle = normalizedHeaders.includes('Record Name')
-            if (!hasTitle) {
-                setErrorMsg("Quick Import failed: Your spreadsheet does not contain the required 'Record Name' header. Please use 'Customize Import' to import.")
+            const hasName = normalizedHeaders.includes('full_name') || normalizedHeaders.includes('name') || normalizedHeaders.includes('email')
+            if (!hasName) {
+                setErrorMsg("Quick Import failed: Your spreadsheet does not contain required admin headers (Full Name or Email).")
                 setLoading(false)
                 return
             }
@@ -236,8 +298,12 @@ export default function ImportModal({ isOpen, onClose, onImportSuccess, type, im
             const mappedRow = {}
             rawHeaders.forEach(header => {
                 const dbKey = getNormalizedKey(header)
-                mappedRow[dbKey] = row[header]
+                mappedRow[dbKey] = formatValueForDb(dbKey, row[header])
             })
+            // Fallback for title if missing
+            if (type !== 'admins' && !mappedRow.text_title && !mappedRow.title && !mappedRow.name) {
+                mappedRow.text_title = row[rawHeaders[0]] || 'Imported Entry'
+            }
             return mappedRow
         })
 
@@ -266,30 +332,6 @@ export default function ImportModal({ isOpen, onClose, onImportSuccess, type, im
             return
         }
 
-        // Validate required database columns are checked
-        const checkedNormalized = checkedColumns.map(getNormalizedKey)
-
-        if (type === 'admins') {
-            const hasName = checkedNormalized.includes('Full Name')
-            const hasEmail = checkedNormalized.includes('Email')
-            const hasPassword = checkedNormalized.includes('Password')
-            
-            if (!hasName || !hasEmail || !hasPassword) {
-                const missing = []
-                if (!hasName) missing.push('Full Name/Name')
-                if (!hasEmail) missing.push('Email')
-                if (!hasPassword) missing.push('Password')
-                setErrorMsg(`Please select Excel columns that contain the required fields: ${missing.join(', ')}`)
-                return
-            }
-        } else {
-            const hasTitle = checkedNormalized.includes('Record Name')
-            if (!hasTitle) {
-                setErrorMsg("Please select the Excel column that contains the required field: Record Name")
-                return
-            }
-        }
-
         if (selectedRows.length === 0) {
             setErrorMsg('Please select at least one row to import.')
             return
@@ -306,7 +348,7 @@ export default function ImportModal({ isOpen, onClose, onImportSuccess, type, im
                 const mappedRow = {}
                 checkedColumns.forEach(header => {
                     const dbKey = getNormalizedKey(header)
-                    mappedRow[dbKey] = row[header]
+                    mappedRow[dbKey] = formatValueForDb(dbKey, row[header])
                 })
                 return mappedRow
             })

@@ -7,7 +7,8 @@ const checkAuth = (req, res, next) => next();
 const router = express.Router();
 router.use(checkAuth);
 
-// Bulk Delete
+// Bulk Import & Bulk Delete
+router.post(['/bulk-import', '/bulk_import', '/master-form/bulk-import', '/master_form/bulk-import', '/admin/master-form/bulk-import', '/api/admin/master-form/bulk-import'], masterFormController.bulkImportRecords);
 router.post(['/bulk-delete', '/bulk_delete', '/master-form/bulk-delete', '/master_form/bulk-delete', '/admin/master-form/bulk-delete', '/api/admin/master-form/bulk-delete'], masterFormController.bulkDeleteRecords);
 
 // Read / Detail

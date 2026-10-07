@@ -447,7 +447,8 @@ const removeStaleDatabase = async (dbNameToRemove) => {
 export const listDatabases = async (req, res) => {
   let metaConnection, adminConnection;
   try {
-    const username = req.query.username || req.headers["x-user-name"] || "admin";
+    const username = (req.query.username || req.headers["x-user-name"] || "admin").trim();
+    const queryRole = (req.query.role || req.headers["x-user-role"] || "").trim();
     const dbToOwnerMap = {};
     const dbNamesSet = new Set();
     const systemDbs = ["admin", "information_schema", "performance_schema", "sys", "mysql"];
@@ -460,52 +461,59 @@ export const listDatabases = async (req, res) => {
       const liveDbName = Object.values(dbObj)[0];
       if (liveDbName && !systemDbs.includes(liveDbName.toLowerCase())) {
         dbNamesSet.add(liveDbName);
-        dbToOwnerMap[liveDbName] = username;
+        dbToOwnerMap[liveDbName] = "admin"; // default unassigned/workbench DBs to admin
       }
     }
 
-    // 2. Query meta database (user_cred and hertz_projects) for owners and additional tracking
+    let userRole = queryRole || (username === "admin" ? "admin" : "user");
+    let userCreatedDbs = [];
+
+    // 2. Query meta database (user_cred and hertz_projects) for owners and tracking
     try {
       metaConnection = await mysql.createConnection({
         ...getDbConfig(),
         database: getMetaDbName(),
       });
 
-      // Tracked databases from user_cred
+      // Fetch user's registered role and created databases
       const [userRows] = await metaConnection.execute(
         "SELECT role, created_databases FROM user_cred WHERE username = ? LIMIT 1",
         [username]
       );
 
       if (userRows.length > 0) {
-        const userRole = userRows[0].role;
-        if (userRole === "admin") {
-          const [allUsers] = await metaConnection.execute(
-            "SELECT username, created_databases FROM user_cred"
-          );
-          for (const row of allUsers) {
-            if (row.created_databases) {
-              const names = row.created_databases.split(",").map(n => n.trim()).filter(Boolean);
-              for (const name of names) {
-                if (!systemDbs.includes(name.toLowerCase())) {
-                  dbToOwnerMap[name] = row.username;
-                  dbNamesSet.add(name);
-                }
-              }
+        userRole = userRows[0].role || userRole;
+        if (userRows[0].created_databases) {
+          userCreatedDbs = userRows[0].created_databases.split(",").map(n => n.trim()).filter(Boolean);
+        }
+      }
+
+      // Map all databases to their respective creators from user_cred
+      const [allUsers] = await metaConnection.execute(
+        "SELECT username, created_databases FROM user_cred"
+      );
+      for (const row of allUsers) {
+        if (row.created_databases) {
+          const names = row.created_databases.split(",").map(n => n.trim()).filter(Boolean);
+          for (const name of names) {
+            if (!systemDbs.includes(name.toLowerCase())) {
+              dbToOwnerMap[name] = row.username;
             }
           }
         }
       }
 
-      // Tracked active databases from hertz_projects
+      // Map databases from hertz_projects to project owners
       const [projRows] = await metaConnection.execute(
         "SELECT databaseName, owner FROM `hertz_projects` WHERE `isDeleted` = 0"
       );
       for (const p of projRows) {
         if (p.databaseName && !systemDbs.includes(p.databaseName.toLowerCase())) {
-          dbNamesSet.add(p.databaseName);
           if (p.owner) {
             dbToOwnerMap[p.databaseName] = p.owner;
+          }
+          if (p.owner === username && !userCreatedDbs.includes(p.databaseName)) {
+            userCreatedDbs.push(p.databaseName);
           }
         }
       }
@@ -517,17 +525,28 @@ export const listDatabases = async (req, res) => {
       }
     }
 
-    // 3. Build final databases list with live table counts
+    const isGlobalAdmin = userRole === "admin" || username === "admin";
+
+    // 3. Build final databases list with live table counts & RBAC filtering
     const databasesList = [];
     for (const dbName of dbNamesSet) {
       if (systemDbs.includes(dbName.toLowerCase())) continue;
+
+      const owner = dbToOwnerMap[dbName] || "admin";
+
+      // If regular user (non-admin), ONLY show databases belonging to this user
+      if (!isGlobalAdmin) {
+        const isUserDb = owner === username || userCreatedDbs.includes(dbName);
+        if (!isUserDb) {
+          continue; // Skip databases created by others or external workbench databases
+        }
+      }
 
       let tablesCount = 0;
       try {
         const [tables] = await adminConnection.query(`SHOW TABLES FROM \`${dbName}\``);
         tablesCount = tables.length;
       } catch (err) {
-        // Even if physical database is not created yet or empty, keep it listed with 0 tables
         tablesCount = 0;
       }
 
@@ -538,7 +557,7 @@ export const listDatabases = async (req, res) => {
         type: "sql",
         createdDate: "Local DB",
         tablesCount: tablesCount,
-        owner: dbToOwnerMap[dbName] || username,
+        owner: isGlobalAdmin ? owner : username,
       });
     }
 

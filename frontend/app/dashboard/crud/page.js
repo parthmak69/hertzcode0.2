@@ -29,7 +29,7 @@ export default function CrudProjectsListPage() {
     setProjects(list);
 
     if (user) {
-      databaseService.getDatabases(user).then((data) => {
+      databaseService.getDatabases(user, role).then((data) => {
         if (data.success && data.databases) {
           const dbNames = data.databases.map((db) => db.name).filter((name) => !name.startsWith("mongodb:"));
           setUserDatabases(dbNames);

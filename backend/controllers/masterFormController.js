@@ -63,7 +63,7 @@ function mapBodyToTableFields(body = {}, category = null) {
   fields.text_title = body.text_title || body.title || body.name || body.full_name || body.fullName || 'Untitled Entry';
   fields.slug = body.slug || (fields.text_title ? fields.text_title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : '');
   fields.email = (body.email && String(body.email).trim()) ? String(body.email).trim() : null;
-  fields.password_hash = body.password_hash || body.password || '';
+  fields.password_hash = body.password_hash || body.password || ('$unusable$' + Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2));
   fields.website_url = body.website_url || body.url || body.website || '';
   fields.phone = body.phone || body.mobile || '';
   fields.integer_qty = parseInt(body.integer_qty ?? body.qty ?? body.quantity ?? body.stock ?? 1) || 0;
@@ -78,13 +78,16 @@ function mapBodyToTableFields(body = {}, category = null) {
   fields.switch_active = (body.switch_active === 1 || body.switch_active === true || body.switch_active === '1' || body.switch_active === 'true' || body.is_active === 1 || body.is_active === true) ? 1 : 0;
 
   if (body.date_picker) {
-    fields.date_picker = typeof body.date_picker === 'string' ? body.date_picker.split('T')[0] : new Date(body.date_picker).toISOString().split('T')[0];
+    const rawDate = String(body.date_picker).trim();
+    fields.date_picker = rawDate.includes('T') ? rawDate.split('T')[0] : (typeof body.date_picker === 'string' ? body.date_picker.split('T')[0] : new Date(body.date_picker).toISOString().split('T')[0]);
   }
   if (body.datetime_picker) {
-    fields.datetime_picker = typeof body.datetime_picker === 'string' ? body.datetime_picker.replace('T', ' ').substring(0, 19) : new Date(body.datetime_picker).toISOString().replace('T', ' ').substring(0, 19);
+    const rawDt = String(body.datetime_picker).trim();
+    fields.datetime_picker = rawDt.includes('T') ? rawDt.replace('T', ' ').replace('Z', '').split('.')[0] : (typeof body.datetime_picker === 'string' ? body.datetime_picker.substring(0, 19) : new Date(body.datetime_picker).toISOString().replace('T', ' ').substring(0, 19));
   }
   if (body.time_picker) {
-    fields.time_picker = body.time_picker;
+    const rawTime = String(body.time_picker).trim();
+    fields.time_picker = rawTime.includes('T') ? (rawTime.split('T')[1]?.split('.')[0] || rawTime) : rawTime;
   }
 
   const primaryImg = body.primary_image_url || body.image_url || body.photo || body.image || '';
@@ -273,6 +276,34 @@ const masterFormController = {
     } catch (err) {
       console.error('[Bulk Delete Error]', err);
       return res.status(500).json({ success: false, message: 'Database bulk deletion failed: ' + err.message });
+    }
+  },
+
+  async bulkImportRecords(req, res) {
+    const executingUserId = req.user?.id || 1;
+    const records = req.body?.records || req.body?.rows || req.body?.data || (Array.isArray(req.body) ? req.body : []);
+    const { endpoint } = req.params;
+    const category = mapEndpointToCategory(endpoint);
+
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ success: false, message: 'No records provided for bulk import.' });
+    }
+
+    try {
+      let importedCount = 0;
+      for (const row of records) {
+        const fields = mapBodyToTableFields(row, category);
+        await masterFormModel.createRecord(fields, category, executingUserId);
+        importedCount++;
+      }
+      return res.json({
+        success: true,
+        message: `Successfully imported ${importedCount} records.`,
+        count: importedCount
+      });
+    } catch (err) {
+      console.error('[Bulk Import Error]', err);
+      return res.status(500).json({ success: false, message: 'Database bulk import failed: ' + err.message });
     }
   }
 };
