@@ -54,6 +54,14 @@ export const dbQuery = async (sql, params = [], executingUserId = 0, actionName 
     return rows;
   }
 
+  // System/meta tables belong strictly to the primary metadata database (admin)
+  const isMetaTableQuery = /hertz_projects|user_cred|recycled_items/i.test(sql);
+  if (isMetaTableQuery) {
+    const primaryPool = getDbPool(primaryDbName);
+    const [rows] = await primaryPool.query(sql, params);
+    return rows;
+  }
+
   const userDbs = await discoverUserDatabases();
 
   // For SELECT / READ queries: check active user project databases first

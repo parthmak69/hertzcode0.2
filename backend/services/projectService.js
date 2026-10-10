@@ -16,7 +16,8 @@ export async function ensureProjectsTable() {
       \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `;
-  await dbQuery(sql, [], 0, 'EnsureHertzProjectsTable');
+  const metaDb = process.env.DB_NAME || 'admin';
+  await dbQuery(sql, [], 0, 'EnsureHertzProjectsTable', metaDb);
 }
 
 /**
@@ -32,7 +33,8 @@ export async function fetchProjects(user, role) {
     params.push(user);
   }
 
-  const rows = await dbQuery(sql, params, 0, 'FetchProjects');
+  const metaDb = process.env.DB_NAME || 'admin';
+  const rows = await dbQuery(sql, params, 0, 'FetchProjects', metaDb);
   return rows.map(r => ({
     ...r,
     isDeleted: r.isDeleted === 1,
@@ -76,6 +78,7 @@ export async function saveProjectsList(projects) {
       deletedAtVal
     ];
 
-    await dbQuery(sql, params, 0, 'SaveProject');
+    const metaDb = process.env.DB_NAME || 'admin';
+    await dbQuery(sql, params, 0, 'SaveProject', metaDb);
   }
 }

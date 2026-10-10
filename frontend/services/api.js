@@ -38,6 +38,9 @@ const request = async (endpoint, options = {}) => {
     }
 
     if (!response.ok) {
+      if (typeof data === "object" && data !== null) {
+        return { success: false, error: data.error || data.message || `HTTP error ${response.status}`, ...data };
+      }
       throw new HttpError(response.status, data.error || `HTTP error ${response.status}`);
     }
 
