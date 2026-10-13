@@ -5,13 +5,12 @@ import Modal from '@/components/ui/Modal'
 import DataTable from '@/components/ui/DataTable'
 import ColumnSelector from '@/components/ui/ColumnSelector'
 import AdminsForm from '@/components/forms/AdminsForm'
-import { exportToExcel } from '@/utils/exportExcel'
 import useAdminCrud from '@/hooks/useAdminCrud'
 import useColumnVisibility from '@/hooks/useColumnVisibility'
 import ConfirmDialog from "@/components/ui/ConfirmDialog"
-import { Trash2, FileSpreadsheet, Upload, Pencil } from 'lucide-react'
+import { Trash2, Pencil } from 'lucide-react'
 import TrashModal from '@/components/modals/TrashModal'
-import ImportModal from '@/components/modals/ImportModal'
+import { getImageUrl } from '@/utils/api'
 
 /* -------------------------------------------------------------------------- */
 /*                                   Columns                                  */
@@ -22,15 +21,6 @@ const allColumns = [
     { key: 'full_name', label: 'Full Name', filterable: true, sortable: true, width: '180px' },
     { key: 'email', label: 'Email', filterable: true, sortable: true, width: '180px' },
     { key: 'phone', label: 'Phone', filterable: true, sortable: true, width: '150px' },
-]
-
-const exportColumns = [
-    { key: 'id', label: 'Admin ID' },
-    { key: 'full_name', label: 'Full Name' },
-    { key: 'email', label: 'Email' },
-    { key: 'phone', label: 'Phone' },
-    { key: 'is_active', label: 'Active' },
-    { key: 'created_at', label: 'Created At' },
 ]
 
 function formatDateTime(value) {
@@ -78,7 +68,6 @@ export default function AdminsPage() {
     const [editingAdmin, setEditingAdmin] = useState(null)
     const [formError, setFormError] = useState('')
     const [visibleColumns, setVisibleColumns] = useColumnVisibility('admins', allColumns)
-    const [isImportModalOpen, setIsImportModalOpen] = useState(false)
 
     const [deleteId, setDeleteId] = useState(null)
     const [deleteLoading, setDeleteLoading] = useState(false)
@@ -217,18 +206,6 @@ export default function AdminsPage() {
         }
     }
 
-    const handleExportExcel = () => {
-        const rows = (data || []).map((a) => ({
-            id: a.id ?? '',
-            full_name: a.full_name ?? '',
-            email: a.email ?? '',
-            phone: a.phone ?? '',
-            is_active: toYesNo(a.is_active),
-            created_at: formatDateTime(a.created_at),
-        }))
-        exportToExcel(rows, exportColumns, 'admins')
-    }
-
     const renderCell = (item, colKey) => {
         const val = item[colKey]
         const keyLower = String(colKey).toLowerCase()
@@ -244,8 +221,7 @@ export default function AdminsPage() {
                     </div>
                 )
             }
-            const cleanPath = String(val).startsWith('uploads/') ? '/' + val : String(val)
-            const src = cleanPath.startsWith('http') || cleanPath.startsWith('data:') ? cleanPath : `http://localhost:5001${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`
+            const src = getImageUrl(val)
             return (
                 <div className="flex items-center gap-2">
                     <div className="relative w-9 h-9 rounded-full overflow-hidden border border-border bg-secondary/40 shadow-xs flex shrink-0">
@@ -307,22 +283,6 @@ export default function AdminsPage() {
                             )}
 
                             <button
-                                onClick={() => setIsImportModalOpen(true)}
-                                className="w-full sm:w-auto px-3 py-2 sm:px-4 sm:py-2 border border-border text-foreground hover:bg-secondary rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center justify-center gap-2 shadow-sm"
-                                title="Import Admins from Excel"
-                            >
-                                <Upload className="w-4 h-4 text-blue-500" /> <span>Import Excel</span>
-                            </button>
-
-                            <button
-                                onClick={handleExportExcel}
-                                className="w-full sm:w-auto px-3 py-2 sm:px-4 sm:py-2 border border-border text-foreground hover:bg-secondary rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center justify-center gap-2 shadow-sm"
-                                title="Export Admins to Excel"
-                            >
-                                <FileSpreadsheet className="w-4 h-4 text-emerald-500" /> <span>Export Excel</span>
-                            </button>
-
-                            <button
                                 onClick={() => setIsTrashModalOpen(true)}
                                 className="w-full sm:w-auto p-2 border rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-all cursor-pointer flex items-center justify-center gap-2 h-10"
                                 title="Recycle Bin"
@@ -363,7 +323,6 @@ export default function AdminsPage() {
                         sortConfig={sortConfig}
                         onSort={setSortConfig}
                         startIndex={startIndex}
-                        onExportExcel={handleExportExcel}
                         selectedIds={selectedIds}
                         onSelectedIdsChange={setSelectedIds}
                         enableInlineEdit={true}
@@ -385,11 +344,7 @@ export default function AdminsPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {data.map((admin) => {
                                 const isSelected = selectedIds.includes(admin.id)
-                                const imgSrc = admin.profile_image ? (
-                                    admin.profile_image.startsWith('http') || admin.profile_image.startsWith('data:')
-                                        ? admin.profile_image
-                                        : `http://localhost:5001${admin.profile_image.startsWith('/') ? '' : '/'}${admin.profile_image}`
-                                ) : null
+                                const imgSrc = admin.profile_image ? getImageUrl(admin.profile_image) : null
 
                                 return (
                                     <div key={admin.id} className={`p-5 rounded-2xl bg-card border shadow-sm flex flex-col justify-between gap-4 transition duration-200 ${isSelected ? 'border-primary' : 'border-border/80'}`}>
@@ -566,14 +521,6 @@ export default function AdminsPage() {
                 isOpen={isTrashModalOpen}
                 onClose={() => setIsTrashModalOpen(false)}
                 onRestoreSuccess={refetch}
-            />
-
-            <ImportModal
-                isOpen={isImportModalOpen}
-                onClose={() => setIsImportModalOpen(false)}
-                onImportSuccess={refetch}
-                type="admins"
-                importUrl="/admin/admins/bulk-import"
             />
 
         </div>

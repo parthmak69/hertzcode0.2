@@ -51,7 +51,7 @@ export default function RootLayout({ children }) {
           }}
         />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <ThemeProvider>
           <AuthGuard>
             {children}

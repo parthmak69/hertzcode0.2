@@ -53,9 +53,9 @@ INSERT INTO `admins` (`id`, `name`, `password`, `email`, `createdOn`, `modifiedO
 CREATE TABLE `master_form_inputs` (
   `id` int(11) NOT NULL,
   `text_title` varchar(255) NOT NULL,
-  `slug` varchar(255) NOT NULL,
-  `email` varchar(255) NOT NULL,
-  `password_hash` varchar(255) NOT NULL,
+  `slug` varchar(255) DEFAULT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `password_hash` varchar(255) DEFAULT NULL,
   `website_url` varchar(2048) DEFAULT NULL,
   `phone` varchar(20) DEFAULT NULL,
   `integer_qty` int(11) NOT NULL DEFAULT 1,
@@ -104,6 +104,63 @@ CREATE TABLE `query_logger` (
   `note` varchar(255) DEFAULT NULL,
   `createdOn` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `portfolio_categories`
+--
+
+CREATE TABLE `portfolio_categories` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `image_url` varchar(500) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_portfolio_cat_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `portfolio_categories`
+--
+
+INSERT INTO `portfolio_categories` (`id`, `name`, `image_url`) VALUES
+(1, 'Development', 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?auto=format&fit=crop&w=600&q=80'),
+(2, 'Design', 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=600&q=80'),
+(3, 'Marketing', 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80'),
+(4, 'Productivity', 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?auto=format&fit=crop&w=600&q=80');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `portfolio_cards`
+--
+
+CREATE TABLE `portfolio_cards` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) NOT NULL,
+  `description` text DEFAULT NULL,
+  `category` varchar(255) DEFAULT 'Development',
+  `button_link` varchar(500) DEFAULT NULL,
+  `image_url` varchar(500) DEFAULT NULL,
+  `switch_active` tinyint(1) DEFAULT 1,
+  `isDeleted` tinyint(1) DEFAULT 0,
+  `deletedOn` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `portfolio_cards`
+--
+
+INSERT INTO `portfolio_cards` (`id`, `title`, `description`, `category`, `button_link`, `image_url`, `switch_active`) VALUES
+(1, 'NextGen AI Analytics Platform', 'Cloud-native analytics dashboard offering real-time streaming queries, interactive visual charts, and automated alerts.', 'Development', 'https://github.com/example/ai-analytics', 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80', 1),
+(2, 'Fintech Crypto Mobile Wallet', 'Non-custodial crypto wallet interface featuring biometrics authentication, hardware keys support, and instant swaps.', 'Development', 'https://github.com/example/crypto-wallet', 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=800&q=80', 1),
+(3, 'NeoBrutalism Design System UI Kit', 'Award-winning design tokens, accessible components, and Figma UI kit tailored for modern SaaS startups.', 'Design', 'https://dribbble.com/example-neobrutalism', 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=800&q=80', 1),
+(4, 'OmniChannel Marketing Growth Suite', 'Campaign automation engine with multivariate A/B testing and AI copy generation.', 'Marketing', 'https://example.com/growth-suite', 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80', 1),
+(5, 'ZenTask Agile Productivity Workspace', 'Collaborative sprint management tool combining Kanban boards, Gantt charts, and calendar timelines.', 'Productivity', 'https://example.com/zentask', 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?auto=format&fit=crop&w=800&q=80', 1),
+(6, 'Luxury Retail Brand Identity', 'Comprehensive visual branding including packaging typography, spatial design, and social media templates.', 'Design', 'https://behance.net/example-luxury-brand', 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80', 1);
 
 --
 -- Indexes for dumped tables

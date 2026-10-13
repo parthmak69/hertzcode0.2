@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTheme } from '@/context/ThemeContext'
-import { apiClient, getUser, clearAuth } from '@/utils/api'
+import { apiClient, getUser, clearAuth, getImageUrl } from '@/utils/api'
 
 export default function Header({ onMenuClick }) {
     const { darkMode, toggleDarkMode } = useTheme()
@@ -250,7 +250,7 @@ export default function Header({ onMenuClick }) {
                                 <div className="w-7 h-7 rounded-full flex shrink-0 items-center justify-center font-bold text-xs border border-primary/20 bg-primary/10 overflow-hidden text-primary">
                                     {user?.profile_image ? (
                                         <img
-                                            src={`http://localhost:5001/${user.profile_image}`}
+                                            src={getImageUrl(user.profile_image)}
                                             alt={user.name}
                                             className="w-full h-full object-cover"
                                         />
@@ -274,7 +274,7 @@ export default function Header({ onMenuClick }) {
                                         <div className="w-8 h-8 rounded-full border border-border bg-secondary flex shrink-0 items-center justify-center overflow-hidden">
                                             {user?.profile_image ? (
                                                 <img
-                                                    src={`http://localhost:5001/${user.profile_image}`}
+                                                    src={getImageUrl(user.profile_image)}
                                                     alt={user.name}
                                                     className="w-full h-full object-cover"
                                                 />
@@ -294,7 +294,7 @@ export default function Header({ onMenuClick }) {
                                         onClick={() => {
                                             setUserDropdownOpen(false)
                                             setEditName(user?.name || '')
-                                            setProfileImagePreview(user?.profile_image ? `http://localhost:5001/${user.profile_image}` : '')
+                                            setProfileImagePreview(user?.profile_image ? getImageUrl(user.profile_image) : '')
                                             setProfileImageFile(null)
                                             setImageAction('none')
                                             setEditError('')

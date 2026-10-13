@@ -23,6 +23,41 @@ export const ensurePortfolioTables = async (executingUserId) => {
         \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `, [], executingUserId, 'Create portfolio_categories table if not exists');
+
+    // Auto-seed default categories if table is empty
+    const catCount = await dbQuery('SELECT COUNT(*) as count FROM `portfolio_categories`', [], executingUserId, 'Check categories count');
+    if (catCount && catCount[0] && (catCount[0].count === 0 || catCount[0].count === '0')) {
+      const defaultCats = [
+        ['Development', 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?auto=format&fit=crop&w=600&q=80'],
+        ['Design', 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=600&q=80'],
+        ['Marketing', 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80'],
+        ['Productivity', 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?auto=format&fit=crop&w=600&q=80']
+      ];
+      for (const [cName, cImg] of defaultCats) {
+        await dbQuery('INSERT IGNORE INTO `portfolio_categories` (`name`, `image_url`) VALUES (?, ?)', [cName, cImg], executingUserId, `Seed category: ${cName}`).catch(() => null);
+      }
+    }
+
+    // Auto-seed default portfolio cards if table is empty
+    const cardCount = await dbQuery('SELECT COUNT(*) as count FROM `portfolio_cards`', [], executingUserId, 'Check cards count');
+    if (cardCount && cardCount[0] && (cardCount[0].count === 0 || cardCount[0].count === '0')) {
+      const defaultCards = [
+        ['NextGen AI Analytics Platform', 'Cloud-native analytics dashboard offering real-time streaming queries, interactive visual charts, and automated alerts.', 'Development', 'https://github.com/example/ai-analytics', 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80', 1],
+        ['Fintech Crypto Mobile Wallet', 'Non-custodial crypto wallet interface featuring biometrics authentication, hardware keys support, and instant swaps.', 'Development', 'https://github.com/example/crypto-wallet', 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=800&q=80', 1],
+        ['NeoBrutalism Design System UI Kit', 'Award-winning design tokens, accessible components, and Figma UI kit tailored for modern SaaS startups.', 'Design', 'https://dribbble.com/example-neobrutalism', 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=800&q=80', 1],
+        ['OmniChannel Marketing Growth Suite', 'Campaign automation engine with multivariate A/B testing and AI copy generation.', 'Marketing', 'https://example.com/growth-suite', 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80', 1],
+        ['ZenTask Agile Productivity Workspace', 'Collaborative sprint management tool combining Kanban boards, Gantt charts, and calendar timelines.', 'Productivity', 'https://example.com/zentask', 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?auto=format&fit=crop&w=800&q=80', 1],
+        ['Luxury Retail Brand Identity', 'Comprehensive visual branding including packaging typography, spatial design, and social media templates.', 'Design', 'https://behance.net/example-luxury-brand', 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80', 1]
+      ];
+      for (const card of defaultCards) {
+        await dbQuery(
+          'INSERT INTO `portfolio_cards` (`title`, `description`, `category`, `button_link`, `image_url`, `switch_active`) VALUES (?, ?, ?, ?, ?, ?)',
+          card,
+          executingUserId,
+          `Seed portfolio card: ${card[0]}`
+        ).catch(() => null);
+      }
+    }
   } catch (e) {
     console.error('ensurePortfolioTables error:', e.message);
   }

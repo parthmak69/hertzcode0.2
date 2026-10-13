@@ -21,6 +21,158 @@ export default function CrudFilesListPage() {
   const [premiumType, setPremiumType] = useState("default");
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [fileToDelete, setFileToDelete] = useState(null);
+
+  // Edit CRUD File State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingFile, setEditingFile] = useState(null);
+  const [editFileName, setEditFileName] = useState("");
+  const [editTableName, setEditTableName] = useState("");
+  const [editPremiumType, setEditPremiumType] = useState("default");
+  const [editResetColumns, setEditResetColumns] = useState(false);
+
+  // Helper: Get standard template columns
+  const getTemplateColumns = (type) => {
+    if (type === "categories") {
+      return [
+        { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+        { id: "col_name_" + Date.now(), name: "name", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_desc_" + Date.now(), name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
+        { id: "col_parent_" + Date.now(), name: "parent_id", type: "select", selectType: "table", selectLookupTable: "categories", selectLookupValue: "id", selectLookupLabel: "name", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_photo_" + Date.now(), name: "image_url", type: "file", isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
+      ];
+    } else if (type === "portfolio") {
+      return [
+        { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+        { id: "col_title_" + Date.now(), name: "title", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_desc_" + Date.now(), name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
+        { id: "col_cat_" + Date.now(), name: "category", type: "text", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_link_" + Date.now(), name: "button_link", type: "text", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_img_" + Date.now(), name: "image_url", type: "file", isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
+      ];
+    } else if (type === "admins") {
+      return [
+        { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+        { id: "col_fname_" + Date.now(), name: "full_name", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_email_" + Date.now(), name: "email", type: "text", isRequired: true, isUnique: true, isListCol: true, isFormCol: true },
+        { id: "col_phone_" + Date.now(), name: "phone", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_pass_" + Date.now(), name: "password", type: "password", isRequired: true, isUnique: false, isListCol: false, isFormCol: true }
+      ];
+    } else if (type === "master-form") {
+      return [
+        { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+        { id: "col_title_" + Date.now(), name: "title", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_subtitle_" + Date.now(), name: "subtitle", type: "text", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_content_" + Date.now(), name: "content", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
+        { id: "col_status_" + Date.now(), name: "status", type: "select", selectType: "static", selectOptions: ["Active", "Inactive"], isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
+      ];
+    } else if (type === "products" || type === "product") {
+      return [
+        { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+        { id: "col_name_" + Date.now(), name: "name", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_price_" + Date.now(), name: "price", type: "number", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_cat_" + Date.now(), name: "categoryID", type: "select", selectType: "table", selectLookupTable: "categories", selectLookupValue: "id", selectLookupLabel: "name", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_photo_" + Date.now(), name: "photo", type: "file", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_desc_" + Date.now(), name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
+        { id: "col_slug_" + Date.now(), name: "slug", type: "text", isRequired: false, isUnique: false, isListCol: false, isFormCol: true }
+      ];
+    } else if (type === "orders" || type === "order") {
+      return [
+        { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+        { id: "col_cust_id_" + Date.now(), name: "customer_id", type: "number", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_cust_" + Date.now(), name: "customer_name", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_email_" + Date.now(), name: "customer_email", type: "text", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_amt_" + Date.now(), name: "total_amount", type: "number", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_pay_" + Date.now(), name: "payment_method", type: "select", selectType: "static", selectOptions: ["COD", "Online", "Card", "UPI"], isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_status_" + Date.now(), name: "status", type: "select", selectType: "static", selectOptions: ["Pending", "Confirmed", "Shipped", "Delivered", "Cancelled"], isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
+      ];
+    } else if (type === "settings" || type === "setting") {
+      return [
+        { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+        { id: "col_key_" + Date.now(), name: "setting_key", type: "text", isRequired: true, isUnique: true, isListCol: true, isFormCol: true },
+        { id: "col_val_" + Date.now(), name: "setting_value", type: "textarea", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
+        { id: "col_desc_" + Date.now(), name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
+      ];
+    }
+    return [];
+  };
+
+  // Helper: Human-friendly template label
+  const getTemplateLabel = (type) => {
+    switch (type) {
+      case 'categories': return 'Categories Catalog';
+      case 'portfolio': return 'Portfolio Cards';
+      case 'admins': return 'Admin Access / Users';
+      case 'master-form': return 'Master Form Inputs';
+      case 'products':
+      case 'product': return 'Products';
+      case 'orders':
+      case 'order': return 'Orders';
+      case 'settings':
+      case 'setting': return 'System Settings';
+      default: return 'Standard CRUD';
+    }
+  };
+
+  const handleOpenEditModal = (file) => {
+    setEditingFile(file);
+    setEditFileName(file.name || "");
+    setEditTableName(file.tableName || file.name || "");
+    setEditPremiumType(file.premiumType || "default");
+    setEditResetColumns(false);
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateFile = (e) => {
+    e.preventDefault();
+    if (!project || !editingFile) return;
+
+    const formattedName = editFileName.trim().toLowerCase().replace(/[\s-]+/g, "_");
+    const formattedTable = editTableName.trim().toLowerCase().replace(/[\s-]+/g, "_") || formattedName;
+
+    let updatedCols = [...(editingFile.columns || [])];
+
+    // If user requested resetting columns to match the new template:
+    if (editResetColumns && editPremiumType && editPremiumType !== "default") {
+      const templateCols = getTemplateColumns(editPremiumType);
+      if (templateCols.length > 0) {
+        updatedCols = templateCols;
+        const hasPk = updatedCols.some(c => c.name.toLowerCase() === "id" || c.isPrimaryKey || c.index === "PRIMARY KEY");
+        if (!hasPk) {
+          updatedCols = [
+            { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
+            ...updatedCols
+          ];
+        }
+        const cNames = new Set(updatedCols.map(c => c.name ? c.name.toLowerCase() : ''));
+        if (!cNames.has("isdeleted") && !cNames.has("is_deleted")) {
+          updatedCols.push({ id: "col_isdeleted_" + Date.now(), name: "isDeleted", type: "number", isRequired: false, isUnique: false, isListCol: false, isFormCol: false });
+        }
+        if (!cNames.has("deletedon") && !cNames.has("deleted_on")) {
+          updatedCols.push({ id: "col_deletedon_" + (Date.now() + 1), name: "deletedOn", type: "datetime", isRequired: false, isUnique: false, isListCol: false, isFormCol: false });
+        }
+      }
+    }
+
+    const updatedFile = {
+      ...editingFile,
+      name: formattedName,
+      tableName: formattedTable,
+      premiumType: editPremiumType,
+      columns: updatedCols
+    };
+
+    const updatedFiles = (project.files || []).map(f => f.id === editingFile.id ? updatedFile : f);
+    const updatedProject = { ...project, files: updatedFiles };
+    const updatedProjectsList = allProjects.map(p => p.id === projectId ? updatedProject : p);
+
+    setProject(updatedProject);
+    setAllProjects(updatedProjectsList);
+    saveProjectsForUser(updatedProjectsList, currentUser, userRole);
+
+    setIsEditModalOpen(false);
+    setEditingFile(null);
+  };
+
   const fetchAvailableTables = async (dbName) => {
     try {
       const data = await databaseService.getTables(dbName);
@@ -63,61 +215,7 @@ export default function CrudFilesListPage() {
     const formattedTableName = tableName.trim().toLowerCase().replace(/[\s-]+/g, "_") || selectedImportTable || formattedFileName;
     let columns = [];
     if (premiumType && premiumType !== "default") {
-      // Auto-generate schema columns based on mapped Premium Template
-      if (premiumType === "categories") {
-        columns = [
-          { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
-          { id: "col_name_" + Date.now(), name: "name", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_desc_" + Date.now(), name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
-          { id: "col_parent_" + Date.now(), name: "parent_id", type: "select", selectType: "table", selectLookupTable: "categories", selectLookupValue: "id", selectLookupLabel: "name", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_photo_" + Date.now(), name: "image_url", type: "file", isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
-        ];
-      } else if (premiumType === "portfolio") {
-        columns = [
-          { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
-          { id: "col_title_" + Date.now(), name: "title", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_desc_" + Date.now(), name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
-          { id: "col_cat_" + Date.now(), name: "category", type: "text", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_link_" + Date.now(), name: "button_link", type: "text", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_img_" + Date.now(), name: "image_url", type: "file", isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
-        ];
-      } else if (premiumType === "admins") {
-        columns = [
-          { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
-          { id: "col_fname_" + Date.now(), name: "full_name", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_email_" + Date.now(), name: "email", type: "text", isRequired: true, isUnique: true, isListCol: true, isFormCol: true },
-          { id: "col_phone_" + Date.now(), name: "phone", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_pass_" + Date.now(), name: "password", type: "password", isRequired: true, isUnique: false, isListCol: false, isFormCol: true }
-        ];
-      } else if (premiumType === "master-form") {
-        columns = [
-          { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
-          { id: "col_title_" + Date.now(), name: "title", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_subtitle_" + Date.now(), name: "subtitle", type: "text", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_content_" + Date.now(), name: "content", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
-          { id: "col_status_" + Date.now(), name: "status", type: "select", selectType: "static", selectOptions: ["Active", "Inactive"], isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
-        ];
-      } else if (premiumType === "products" || premiumType === "product") {
-        columns = [
-          { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
-          { id: "col_name_" + Date.now(), name: "name", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_price_" + Date.now(), name: "price", type: "number", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_cat_" + Date.now(), name: "categoryID", type: "select", selectType: "table", selectLookupTable: "categories", selectLookupValue: "id", selectLookupLabel: "name", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_photo_" + Date.now(), name: "photo", type: "file", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_desc_" + Date.now(), name: "description", type: "textarea", isRequired: false, isUnique: false, isListCol: false, isFormCol: true },
-          { id: "col_slug_" + Date.now(), name: "slug", type: "text", isRequired: false, isUnique: false, isListCol: false, isFormCol: true }
-        ];
-      } else if (premiumType === "orders" || premiumType === "order") {
-        columns = [
-          { id: "col_id_" + Date.now(), name: "id", type: "number", isRequired: false, isUnique: true, isListCol: true, isFormCol: false, index: "PRIMARY KEY", isPrimaryKey: true, isAutoIncrement: true },
-          { id: "col_cust_id_" + Date.now(), name: "customer_id", type: "number", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_cust_" + Date.now(), name: "customer_name", type: "text", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_email_" + Date.now(), name: "customer_email", type: "text", isRequired: false, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_amt_" + Date.now(), name: "total_amount", type: "number", isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_pay_" + Date.now(), name: "payment_method", type: "select", selectType: "static", selectOptions: ["COD", "Online", "Card", "UPI"], isRequired: true, isUnique: false, isListCol: true, isFormCol: true },
-          { id: "col_status_" + Date.now(), name: "status", type: "select", selectType: "static", selectOptions: ["Pending", "Confirmed", "Shipped", "Delivered", "Cancelled"], isRequired: false, isUnique: false, isListCol: true, isFormCol: true }
-        ];
-      }
+      columns = getTemplateColumns(premiumType);
     } else if (selectedImportTable) {
       try {
         const data = await databaseService.getTables(project.databaseName);
@@ -243,8 +341,8 @@ export default function CrudFilesListPage() {
         editButton: true,
         duplicateButton: false,
         deleteButton: true,
-        excelImport: true,
-        excelExport: true,
+        excelImport: premiumType !== "admins",
+        excelExport: premiumType !== "admins",
         recycleBin: false,
         apiTarget: "admin"
       }
@@ -341,59 +439,73 @@ export default function CrudFilesListPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "14px" }}>
               <thead>
                 <tr style={{ borderBottom: "2px solid var(--border-color)", backgroundColor: "var(--bg-tertiary)" }}>
-                  <th style={{ padding: "14px 16px", color: "var(--text-secondary)", fontWeight: 600, width: "80px" }}>Sr</th>
+                  <th style={{ padding: "14px 16px", color: "var(--text-secondary)", fontWeight: 600, width: "60px" }}>Sr</th>
                   <th style={{ padding: "14px 16px", color: "var(--text-secondary)", fontWeight: 600 }}>File Name</th>
                   <th style={{ padding: "14px 16px", color: "var(--text-secondary)", fontWeight: 600 }}>Database Table</th>
+                  <th style={{ padding: "14px 16px", color: "var(--text-secondary)", fontWeight: 600 }}>Template Mapping</th>
                   <th style={{ padding: "14px 16px", color: "var(--text-secondary)", fontWeight: 600 }}>Created Date</th>
-                  <th style={{ padding: "14px 16px", color: "var(--text-secondary)", fontWeight: 600, width: "180px" }}>Actions</th>
+                  <th style={{ padding: "14px 16px", color: "var(--text-secondary)", fontWeight: 600, width: "320px" }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {!project.files || project.files.filter((f) => !f.isDeleted).length === 0 ? <tr>
-                    <td colSpan={5} style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>
+                    <td colSpan={6} style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>
                       No files created yet. Click &quot;Add CRUD File&quot; to start!
                     </td>
                   </tr> : project.files.filter((file) => !file.isDeleted && file.name.toLowerCase().includes(searchQuery.toLowerCase())).map((file, idx) => <tr key={file.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
                         <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{idx + 1}</td>
                         <td style={{ padding: "14px 16px" }}>
                           <button
-    onClick={() => router.push(`/dashboard/crud/${projectId}/${file.id}`)}
-    style={{ background: "none", border: "none", color: "#0ea5e9", textDecoration: "underline", cursor: "pointer", fontSize: "14px", fontWeight: "500", padding: 0 }}
-  >
+                            onClick={() => router.push(`/dashboard/crud/${projectId}/${file.id}`)}
+                            style={{ background: "none", border: "none", color: "#0ea5e9", textDecoration: "underline", cursor: "pointer", fontSize: "14px", fontWeight: "500", padding: 0 }}
+                          >
                             {file.name}
                           </button>
                         </td>
                         <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{file.tableName}</td>
+                        <td style={{ padding: "14px 16px" }}>
+                          <span style={{ 
+                            display: "inline-block", 
+                            padding: "3px 10px", 
+                            borderRadius: "12px", 
+                            fontSize: "12px", 
+                            fontWeight: 600,
+                            backgroundColor: file.premiumType === 'categories' ? 'rgba(16, 185, 129, 0.15)' : file.premiumType === 'portfolio' ? 'rgba(59, 130, 246, 0.15)' : file.premiumType === 'products' ? 'rgba(245, 158, 11, 0.15)' : file.premiumType === 'master-form' ? 'rgba(168, 85, 247, 0.15)' : (file.premiumType === 'settings' || file.premiumType === 'setting') ? 'rgba(14, 165, 233, 0.15)' : 'rgba(100, 116, 139, 0.15)',
+                            color: file.premiumType === 'categories' ? '#10b981' : file.premiumType === 'portfolio' ? '#3b82f6' : file.premiumType === 'products' ? '#f59e0b' : file.premiumType === 'master-form' ? '#a855f7' : (file.premiumType === 'settings' || file.premiumType === 'setting') ? '#0ea5e9' : 'var(--text-muted)'
+                          }}>
+                            {getTemplateLabel(file.premiumType)}
+                          </span>
+                        </td>
                         <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{file.createdAt}</td>
                         <td style={{ padding: "14px 16px" }}>
-                          <div style={{ display: "flex", gap: "8px" }}>
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                             <button
-    onClick={() => window.open(`/dashboard/crud/${projectId}/admin-portal/login`, "_blank")}
-    style={{ border: "none", background: "none", cursor: "pointer", padding: "6px", color: "#10b981", display: "inline-flex", alignItems: "center", gap: "4px", fontWeight: "bold" }}
-    title="View Branded Admin Portal"
-  >
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-                                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                              onClick={() => handleOpenEditModal(file)}
+                              style={{ border: "none", background: "none", cursor: "pointer", padding: "6px", color: "#3b82f6", display: "inline-flex", alignItems: "center", gap: "4px", fontWeight: "600" }}
+                              title="Edit Module / Table & Template Mapping"
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                               </svg>
-                              View Admin Panel
+                              Edit CRUD
                             </button>
                             <button
-    onClick={() => router.push(`/dashboard/crud/${projectId}/${file.id}`)}
-    style={{ border: "none", background: "none", cursor: "pointer", padding: "6px", color: "#f59e0b", display: "inline-flex", alignItems: "center", gap: "4px" }}
-    title="Configure UI Builder"
-  >
+                              onClick={() => router.push(`/dashboard/crud/${projectId}/${file.id}`)}
+                              style={{ border: "none", background: "none", cursor: "pointer", padding: "6px", color: "#f59e0b", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                              title="Configure UI Builder"
+                            >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                 <circle cx="12" cy="12" r="3" />
                                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                               </svg>
-                              Customize & Build UI
+                              Customize UI
                             </button>
-                             <button
-    onClick={() => confirmDeleteFile(file.id, file.name)}
-    style={{ border: "none", background: "none", cursor: "pointer", padding: "6px", color: "#ef4444", display: "inline-flex", alignItems: "center" }}
-    title="Delete File"
-  >
+                            <button
+                              onClick={() => confirmDeleteFile(file.id, file.name)}
+                              style={{ border: "none", background: "none", cursor: "pointer", padding: "6px", color: "#ef4444", display: "inline-flex", alignItems: "center" }}
+                              title="Delete File"
+                            >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                 <polyline points="3 6 5 6 21 6" />
                                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -481,6 +593,7 @@ export default function CrudFilesListPage() {
                     <option value="admins">Admins System</option>
                     <option value="products">Products Catalog</option>
                     <option value="orders">Orders System</option>
+                    <option value="settings">System Settings</option>
                   </select>
                 </div>
 
@@ -489,6 +602,98 @@ export default function CrudFilesListPage() {
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", padding: "16px 24px", borderTop: "1px solid var(--border-color)" }}>
                 <button type="button" onClick={() => setIsModalOpen(false)} style={{ padding: "8px 16px", borderRadius: "6px", border: "1px solid var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", cursor: "pointer", fontSize: "14px" }}>Close</button>
                 <button type="submit" style={{ padding: "8px 16px", borderRadius: "6px", border: "none", backgroundColor: "#3b82f6", color: "white", cursor: "pointer", fontSize: "14px", fontWeight: "bold" }}>Create File</button>
+              </div>
+            </form>
+          </div>
+        </div>}
+
+      {/* ==================== MODAL: EDIT CRUD FILE ==================== */}
+      {isEditModalOpen && editingFile && <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(15, 23, 42, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1e3 }}>
+          <div style={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "8px", width: "600px", maxWidth: "90vw", boxShadow: "var(--shadow-lg)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 24px", borderBottom: "1px solid var(--border-color)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                <h3 style={{ fontWeight: "bold", fontSize: "16px", color: "var(--text-primary)", margin: 0 }}>Edit CRUD File &amp; Mapping</h3>
+              </div>
+              <button onClick={() => { setIsEditModalOpen(false); setEditingFile(null); }} style={{ background: "none", border: "none", fontSize: "18px", cursor: "pointer", color: "var(--text-muted)" }}>✕</button>
+            </div>
+            <form onSubmit={handleUpdateFile}>
+              <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "18px" }}>
+                
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-muted)" }}>File / Module Name (e.g. categories, portfolio_cards):</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFileName}
+                    onChange={(e) => setEditFileName(e.target.value.toLowerCase().replace(/[\s-]+/g, "_"))}
+                    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
+                  />
+                  <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>URL path will become: <code style={{ color: "#3b82f6" }}>/{editFileName}</code></span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-muted)" }}>Database Table Name:</label>
+                  <input
+                    type="text"
+                    required
+                    value={editTableName}
+                    onChange={(e) => setEditTableName(e.target.value.toLowerCase().replace(/[\s-]+/g, "_"))}
+                    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
+                  />
+                  <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>MySQL table name: <code style={{ color: "#10b981" }}>{editTableName}</code></span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-muted)" }}>Map to Premium Page Template:</label>
+                  <select
+                    value={editPremiumType}
+                    onChange={(e) => setEditPremiumType(e.target.value)}
+                    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
+                  >
+                    <option value="default">Default Standard CRUD</option>
+                    <option value="master-form">Master Form Inputs</option>
+                    <option value="portfolio">Portfolio Cards</option>
+                    <option value="categories">Categories Folder / Catalog</option>
+                    <option value="admins">Admins System</option>
+                    <option value="products">Products Catalog</option>
+                    <option value="orders">Orders System</option>
+                    <option value="settings">System Settings</option>
+                  </select>
+                </div>
+
+                <div style={{ padding: "12px 14px", borderRadius: "6px", backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                  <input 
+                    type="checkbox" 
+                    id="resetColsCheck" 
+                    checked={editResetColumns} 
+                    onChange={(e) => setEditResetColumns(e.target.checked)}
+                    style={{ marginTop: "3px", cursor: "pointer" }}
+                  />
+                  <label htmlFor="resetColsCheck" style={{ fontSize: "13px", color: "var(--text-primary)", cursor: "pointer", lineHeight: "1.4" }}>
+                    <strong>Reset &amp; sync schema columns</strong> to match the selected template standard fields (recommended if switching between different templates like Categories ➔ Portfolio Cards).
+                  </label>
+                </div>
+
+              </div>
+              
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", padding: "16px 24px", borderTop: "1px solid var(--border-color)" }}>
+                <button 
+                  type="button" 
+                  onClick={() => { setIsEditModalOpen(false); setEditingFile(null); }} 
+                  style={{ padding: "8px 16px", borderRadius: "6px", border: "1px solid var(--border-color)", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", cursor: "pointer", fontSize: "14px" }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  style={{ padding: "8px 16px", borderRadius: "6px", border: "none", backgroundColor: "#3b82f6", color: "white", cursor: "pointer", fontSize: "14px", fontWeight: "bold" }}
+                >
+                  Save Changes
+                </button>
               </div>
             </form>
           </div>

@@ -13,6 +13,8 @@ import crudRoutes from "./routes/crudRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import adminsRoutes from "./routes/admin/adminsRoutes.js";
 import masterFormRoutes from "./routes/masterFormRoutes.js";
+import categoryRoutes from "./routes/categoryRoutes.js";
+import productRoutes from "./routes/productRoutes.js";
 import uploadParser from "./middleware/uploadMiddleware.js";
 
 dotenv.config();
@@ -124,6 +126,19 @@ app.get(['/testing/fake-data', '/api/testing/fake-data'], (req, res) => {
     { name: 'Fashion & Urban Wear', description: 'Trending men and women clothing, footwear, and fashion accessories.', image_url: 'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=600&q=80' }
   ];
 
+  if (type === 'product' || type === 'products') {
+    const fakeProducts = [
+      { name: 'Sony WH-1000XM5 Wireless Headphones', price: 399.99, stock: 45, photo: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80', description: 'Industry-leading noise cancellation with two processors and 8 microphones for exceptional sound clarity and hands-free calling.' },
+      { name: 'Apple Watch Series 9 GPS 45mm', price: 429.00, stock: 28, photo: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80', description: 'Advanced health sensors, Always-On Retina display, crash detection, and water resistance up to 50 meters.' },
+      { name: 'Logitech MX Master 3S Wireless Mouse', price: 99.99, stock: 60, photo: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=600&q=80', description: 'Ergonomic performance mouse with quiet clicks, 8K DPI any-surface tracking, and ultra-fast MagSpeed scrolling.' },
+      { name: 'Nike Air Max 270 React Sneakers', price: 159.50, stock: 35, photo: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80', description: 'Iconic Max Air 270 unit delivers all-day comfort with lightweight foam cushioning and contemporary street style.' },
+      { name: 'Keychron Q1 Pro Custom Mechanical Keyboard', price: 198.00, stock: 18, photo: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&q=80', description: 'Full metal 75% layout keyboard with wireless Bluetooth 5.1 connectivity, hot-swappable switches, and QMK/VIA support.' },
+      { name: 'Minimalist Ceramic Coffee Mug (Set of 2)', price: 34.00, stock: 72, photo: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=600&q=80', description: 'Handcrafted stoneware ceramic mugs with ergonomic handle and heat-retaining matte glazed finish.' }
+    ];
+    const randomProduct = fakeProducts[Math.floor(Math.random() * fakeProducts.length)];
+    return res.json({ success: true, data: randomProduct });
+  }
+
   if (type === 'master' || type === 'master_form' || type === 'master_form_inputs') {
     const category = req.query.category || 'grocery_staples';
     const sampleProducts = [
@@ -178,6 +193,93 @@ app.get(['/testing/fake-data', '/api/testing/fake-data'], (req, res) => {
     });
   }
 
+  if (type === 'portfolio' || type === 'portfolio_card' || type === 'portfolio_cards') {
+    const samplePortfolios = [
+      {
+        title: 'NextGen AI Analytics Platform',
+        description: 'Cloud-native analytics dashboard offering real-time streaming queries, interactive visual charts, and automated alerts.',
+        category: 'Development',
+        button_link: 'https://github.com/example/ai-analytics',
+        image_url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80',
+        switch_active: 1
+      },
+      {
+        title: 'Fintech Crypto Mobile Wallet',
+        description: 'Non-custodial crypto wallet interface featuring biometrics authentication, hardware keys support, and instant swaps.',
+        category: 'Development',
+        button_link: 'https://github.com/example/crypto-wallet',
+        image_url: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=800&q=80',
+        switch_active: 1
+      },
+      {
+        title: 'NeoBrutalism Design System UI Kit',
+        description: 'Award-winning design tokens, accessible components, and Figma UI kit tailored for modern SaaS startups.',
+        category: 'Design',
+        button_link: 'https://dribbble.com/example-neobrutalism',
+        image_url: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=800&q=80',
+        switch_active: 1
+      },
+      {
+        title: 'OmniChannel Marketing Growth Suite',
+        description: 'Campaign automation engine with multivariate A/B testing and AI copy generation.',
+        category: 'Marketing',
+        button_link: 'https://example.com/growth-suite',
+        image_url: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80',
+        switch_active: 1
+      },
+      {
+        title: 'ZenTask Agile Productivity Workspace',
+        description: 'Collaborative sprint management tool combining Kanban boards, Gantt charts, and calendar timelines.',
+        category: 'Productivity',
+        button_link: 'https://example.com/zentask',
+        image_url: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?auto=format&fit=crop&w=800&q=80',
+        switch_active: 1
+      },
+      {
+        title: 'Luxury Retail Brand Identity',
+        description: 'Comprehensive visual branding including packaging typography, spatial design, and social media templates.',
+        category: 'Design',
+        button_link: 'https://behance.net/example-luxury-brand',
+        image_url: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80',
+        switch_active: 1
+      }
+    ];
+    const picked = samplePortfolios[Math.floor(Math.random() * samplePortfolios.length)];
+    return res.json({ success: true, data: picked });
+  }
+
+  if (type === 'admin' || type === 'admins') {
+    const sampleAdmins = [
+      { name: 'Sarah Connor', email: 'sarah.connor@example.com', role: 'Admin' },
+      { name: 'Marcus Vance', email: 'marcus.vance@example.com', role: 'Editor' },
+      { name: 'Elena Rostova', email: 'elena.r@example.com', role: 'Manager' },
+      { name: 'David Kim', email: 'david.kim@example.com', role: 'Admin' }
+    ];
+    const picked = sampleAdmins[Math.floor(Math.random() * sampleAdmins.length)];
+    return res.json({ success: true, data: picked });
+  }
+
+  if (type === 'setting' || type === 'settings') {
+    const sampleSettings = [
+      { setting_key: 'company_tax_id', setting_value: 'TAX-US-9823101', description: 'Federal tax identification code for sales reporting' },
+      { setting_key: 'invoice_prefix', setting_value: 'INV-2026-', description: 'Standard billing serial number prefix' },
+      { setting_key: 'session_timeout_minutes', setting_value: '60', description: 'Auto logout duration for idle administrators' },
+      { setting_key: 'email_sender_name', setting_value: 'Hertzcode Support', description: 'Sender name on outgoing transactional emails' }
+    ];
+    const picked = sampleSettings[Math.floor(Math.random() * sampleSettings.length)];
+    return res.json({ success: true, data: picked });
+  }
+
+  if (type === 'order' || type === 'orders') {
+    const sampleOrders = [
+      { customer_name: 'Alexander Wright', customer_email: 'alex.wright@example.com', customer_phone: '+1 (555) 234-5678', shipping_address: '742 Evergreen Terrace, Springfield, OR', total_amount: 249.99, payment_method: 'Credit Card', status: 'Completed' },
+      { customer_name: 'Sophia Martinez', customer_email: 'sophia.m@example.com', customer_phone: '+1 (555) 876-5432', shipping_address: '120 Broadway Ave, New York, NY', total_amount: 189.50, payment_method: 'PayPal', status: 'Processing' },
+      { customer_name: 'David Chen', customer_email: 'david.chen@example.com', customer_phone: '+1 (555) 345-6789', shipping_address: '45 Market Street, San Francisco, CA', total_amount: 368.99, payment_method: 'COD', status: 'Pending' }
+    ];
+    const picked = sampleOrders[Math.floor(Math.random() * sampleOrders.length)];
+    return res.json({ success: true, data: picked });
+  }
+
   const randomCat = fakeCategories[Math.floor(Math.random() * fakeCategories.length)];
   res.json({ success: true, data: randomCat });
 });
@@ -210,6 +312,32 @@ app.use("/api/crud", crudRoutes);
 app.use(["/admin/admins", "/api/admin/admins", "/api/admins"], adminsRoutes);
 app.use(["/admin/admin", "/api/admin/admin"], adminRoutes);
 app.use(["/admin/master-form", "/api/admin/master-form", "/api/apiAdmin/master-form", "/api/master-form", "/api/master_form_inputs", "/master-form"], masterFormRoutes);
+
+// Category Routes
+app.use([
+  "/admin/categories",
+  "/api/admin/categories",
+  "/api/apiAdmin/categories",
+  "/api/categories",
+  "/admin/category",
+  "/api/admin/category",
+  "/api/category",
+  "/categories",
+  "/category"
+], categoryRoutes);
+
+// Product Routes
+app.use([
+  "/admin/products",
+  "/api/admin/products",
+  "/api/apiAdmin/products",
+  "/api/products",
+  "/admin/product",
+  "/api/admin/product",
+  "/api/product",
+  "/products",
+  "/product"
+], productRoutes);
 
 // Helper to get MySQL Connection for Dynamic Table CRUD (supports dynamic DB discovery)
 const getDynamicDbConnection = async (reqOrDbName) => {
@@ -334,7 +462,11 @@ async function autoHealInsert(db, tableName, initialData, userContext = null) {
         const badCol = colMatch ? (colMatch[1] || colMatch[2]) : null;
         
         if (badCol) {
-          delete data[badCol];
+          if (badCol.toLowerCase() === 'slug') {
+            data[badCol] = (data.name || 'item').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') + '-' + Date.now();
+          } else {
+            delete data[badCol];
+          }
           let alterSql = `ALTER TABLE \`${tableName}\` MODIFY COLUMN \`${badCol}\` VARCHAR(255) NULL DEFAULT NULL`;
           if (badCol.toLowerCase().includes('date') || badCol.toLowerCase().includes('time') || badCol.toLowerCase().includes('created') || badCol.toLowerCase().includes('updated') || badCol.toLowerCase().includes('modified')) {
             alterSql = `ALTER TABLE \`${tableName}\` MODIFY COLUMN \`${badCol}\` DATETIME NULL DEFAULT CURRENT_TIMESTAMP`;
@@ -379,9 +511,18 @@ export async function loadMvcRoutes() {
             const aliases = new Set([tableName, singularName, pluralName]);
 
             const lowerTable = tableName.toLowerCase();
-            if (lowerTable.includes('cat') || lowerTable.includes('categor') || lowerTable.includes('cateoger')) {
+            if (
+              lowerTable.includes('cat') || 
+              lowerTable.includes('categor') || 
+              lowerTable.includes('cateoger') || 
+              lowerTable.includes('ctae') || 
+              lowerTable.includes('ctag') || 
+              lowerTable.includes('categ')
+            ) {
               aliases.add('category');
               aliases.add('categories');
+              aliases.add('ctaegorie');
+              aliases.add('ctaegories');
               aliases.add('cateogerie');
               aliases.add('cateogeries');
               aliases.add('product_category');
@@ -397,6 +538,14 @@ export async function loadMvcRoutes() {
               aliases.add('portfolios');
               aliases.add('portfolio-categories');
               aliases.add('portfolio_categories');
+            }
+            if (lowerTable.includes('setting')) {
+              aliases.add('setting');
+              aliases.add('settings');
+              aliases.add('system_settings');
+              aliases.add('system-settings');
+              aliases.add('site_settings');
+              aliases.add('site-settings');
             }
             if (lowerTable.includes('admin')) {
               aliases.add('admin');
@@ -439,7 +588,7 @@ global.loadMvcRoutes = loadMvcRoutes;
     app.all(['/api/apiAdmin/:tableName*', '/api/apiCustomer/:tableName*', '/api/admin/:tableName*', '/admin/:tableName*', '/api/:tableName*'], async (req, res, next) => {
       if (res.headersSent) return;
       const rawTable = req.params.tableName;
-      const excludedNames = ['upload', 'auth', 'testing', 'storage', 'database', 'crud', 'ai', 'admin', 'admins', 'category', 'categories', 'product', 'products', 'portfolio', 'portfolios', 'order', 'orders', 'user', 'users', 'master-form', 'forms'];
+      const excludedNames = ['upload', 'auth', 'testing', 'storage', 'database', 'crud', 'ai', 'admin', 'admins', 'category', 'categories', 'product', 'products', 'portfolio', 'portfolios', 'order', 'orders', 'user', 'users', 'master-form', 'forms', 'setting', 'settings'];
       if (!rawTable || excludedNames.includes(rawTable.toLowerCase())) {
         return next();
       }

@@ -6,7 +6,7 @@ import { ArrowLeft, Pencil, Trash2, Shield } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import AdminForm from '@/components/forms/AdminsForm'
-import { apiClient } from '@/utils/api'
+import { apiClient, getImageUrl } from '@/utils/api'
 
 export default function AdminDetailsPage() {
     const { id } = useParams()
@@ -156,11 +156,7 @@ export default function AdminDetailsPage() {
         )
     }
 
-    const imgSrc = admin.profile_image ? (
-        admin.profile_image.startsWith('http') || admin.profile_image.startsWith('data:')
-            ? admin.profile_image
-            : `http://localhost:5001${admin.profile_image.startsWith('/') ? '' : '/'}${admin.profile_image}`
-    ) : null
+    const imgSrc = admin.profile_image ? getImageUrl(admin.profile_image) : null
 
     return (
         <div className="min-h-full bg-background p-6 space-y-6">

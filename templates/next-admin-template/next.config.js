@@ -26,14 +26,15 @@ const nextConfig = {
 
     // Proxy API and Upload requests to standalone Express backend
     async rewrites() {
+        const backendOrigin = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001'
         return [
             {
                 source: '/api/:path*',
-                destination: 'http://localhost:5001/api/:path*',
+                destination: `${backendOrigin}/api/:path*`,
             },
             {
                 source: '/uploads/:path*',
-                destination: 'http://localhost:5001/uploads/:path*',
+                destination: `${backendOrigin}/uploads/:path*`,
             },
         ]
     },

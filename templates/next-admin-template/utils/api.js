@@ -22,9 +22,14 @@ export const UPLOADS_BASE_URL = ''
  */
 export function getImageUrl(path) {
     if (!path) return ''
-    if (path.startsWith('http') || path.startsWith('data:')) return path
+    if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('blob:')) return path
     const cleanPath = path.startsWith('/') ? path : '/' + path
-    return `http://localhost:5001${cleanPath}`
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/?$/, '') : '')
+    if (backendUrl) {
+        return `${backendUrl.replace(/\/$/, '')}${cleanPath}`
+    }
+    // Relative path routes through Next.js proxy rewrite (/uploads/... -> Express backend)
+    return cleanPath
 }
 
 export const AUTH_STORAGE_KEYS = {

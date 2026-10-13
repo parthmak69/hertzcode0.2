@@ -13,8 +13,57 @@ import {
   Search,
   Loader2,
   DollarSign,
-  Layers
+  Layers,
+  Upload,
+  X,
+  Sparkles,
+  Image as ImageIcon
 } from 'lucide-react';
+
+const DEFAULT_DEMO_PRODUCTS = [
+  {
+    name: 'Sony WH-1000XM5 Wireless Headphones',
+    price: 399.99,
+    stock: 45,
+    image_url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80',
+    description: 'Industry-leading noise cancellation with two processors and 8 microphones for exceptional sound clarity and hands-free calling.'
+  },
+  {
+    name: 'Apple Watch Series 9 GPS 45mm',
+    price: 429.00,
+    stock: 28,
+    image_url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80',
+    description: 'Advanced health sensors, Always-On Retina display, crash detection, and water resistance up to 50 meters.'
+  },
+  {
+    name: 'Logitech MX Master 3S Wireless Mouse',
+    price: 99.99,
+    stock: 60,
+    image_url: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=600&q=80',
+    description: 'Ergonomic performance mouse with quiet clicks, 8K DPI any-surface tracking, and ultra-fast MagSpeed scrolling.'
+  },
+  {
+    name: 'Nike Air Max 270 React Sneakers',
+    price: 159.50,
+    stock: 35,
+    image_url: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80',
+    description: 'Iconic Max Air 270 unit delivers all-day comfort with lightweight foam cushioning and contemporary street style.'
+  },
+  {
+    name: 'Keychron Q1 Pro Custom Mechanical Keyboard',
+    price: 198.00,
+    stock: 18,
+    image_url: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&q=80',
+    description: 'Full metal 75% layout keyboard with wireless Bluetooth 5.1 connectivity, hot-swappable switches, and QMK/VIA support.'
+  },
+  {
+    name: 'Minimalist Ceramic Coffee Mug (Set of 2)',
+    price: 34.00,
+    stock: 72,
+    image_url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=600&q=80',
+    description: 'Handcrafted stoneware ceramic mugs with ergonomic handle and heat-retaining matte glazed finish.'
+  }
+];
 
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
@@ -28,6 +77,8 @@ export default function ProductsPage() {
   const [price, setPrice] = useState('');
   const [stock, setStock] = useState('');
   const [image, setImage] = useState('');
+  const [imageFile, setImageFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState('');
   const [submitLoading, setSubmitLoading] = useState(false);
 
   // Delete State
@@ -38,11 +89,71 @@ export default function ProductsPage() {
     setLoading(true);
     try {
       const res = await apiClient.get('/admin/products');
-      if (res.success) {
-        setProducts(res.data || []);
+      if (res && res.success) {
+        const list = res.data || [];
+        if (list.length === 0) {
+          const seedRes = await apiClient.post('/admin/products/seed', {}).catch(() => null);
+          if (seedRes && seedRes.success && seedRes.data?.length > 0) {
+            setProducts(seedRes.data);
+            return;
+          }
+        }
+        setProducts(list);
       }
     } catch (err) {
       console.error('Fetch products error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFillFakeData = async () => {
+    try {
+      const res = await apiClient.get('/testing/fake-data?type=product').catch(() => null);
+      if (res && res.success && res.data && res.data.name) {
+        setName(res.data.name);
+        setPrice(String(res.data.price || 99.99));
+        setStock(String(res.data.stock || 25));
+        const img = res.data.photo || res.data.image_url || res.data.image || '';
+        setImage(img);
+        setImageFile(null);
+        setPreviewUrl(img);
+        toast.success('Filled form with realistic product fake data!');
+        return;
+      }
+    } catch (e) {}
+    const randomItem = DEFAULT_DEMO_PRODUCTS[Math.floor(Math.random() * DEFAULT_DEMO_PRODUCTS.length)];
+    setName(randomItem.name);
+    setPrice(String(randomItem.price));
+    setStock(String(randomItem.stock));
+    setImage(randomItem.image_url);
+    setImageFile(null);
+    setPreviewUrl(randomItem.image_url);
+    toast.success('Filled form with realistic product fake data!');
+  };
+
+  const handleLoadDemoProducts = async () => {
+    setLoading(true);
+    try {
+      const res = await apiClient.post('/admin/products/seed', {}).catch(() => null);
+      if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+        setProducts(res.data);
+        toast.success('Loaded demo products successfully!');
+        setLoading(false);
+        return;
+      }
+      for (const item of DEFAULT_DEMO_PRODUCTS) {
+        await apiClient.post('/admin/products', {
+          ...item,
+          photo: item.image_url,
+          slug: item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now()
+        }).catch(() => null);
+      }
+      await fetchProducts();
+      toast.success('Loaded demo products successfully!');
+    } catch (err) {
+      console.error('Load demo products error:', err);
+      toast.error('Failed to load demo products');
     } finally {
       setLoading(false);
     }
@@ -58,15 +169,38 @@ export default function ProductsPage() {
       setName(product.name || '');
       setPrice(product.price !== undefined ? String(product.price) : '');
       setStock(product.stock !== undefined ? String(product.stock) : '');
-      setImage(product.image || product.photo || product.image_url || product.primary_image_url || '');
+      const existingImg = product.photo || product.image || product.image_url || product.primary_image_url || '';
+      setImage(existingImg);
+      setImageFile(null);
+      setPreviewUrl(existingImg ? (existingImg.startsWith('http') || existingImg.startsWith('data:') ? existingImg : existingImg.startsWith('/') ? existingImg : `/${existingImg}`) : '');
     } else {
       setEditingProduct(null);
       setName('');
       setPrice('');
       setStock('');
       setImage('');
+      setImageFile(null);
+      setPreviewUrl('');
     }
     setIsModalOpen(true);
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPreviewUrl(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImage('');
+    setPreviewUrl('');
   };
 
   const handleSubmit = async (e) => {
@@ -78,20 +212,42 @@ export default function ProductsPage() {
 
     setSubmitLoading(true);
     try {
-      const payload = {
-        name: name.trim(),
-        price: parseFloat(price) || 0.00,
-        stock: parseInt(stock) || 0,
-        image: image.trim(),
-        photo: image.trim(),
-        image_url: image.trim()
-      };
-
+      const cleanSlug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') + '-' + Date.now();
       let res;
-      if (editingProduct) {
-        res = await apiClient.put(`/admin/products/${editingProduct.id}`, payload);
+      if (imageFile) {
+        // Multi-part file upload
+        const formData = new FormData();
+        formData.append('name', name.trim());
+        formData.append('slug', cleanSlug);
+        formData.append('price', parseFloat(price) || 0.00);
+        formData.append('stock', parseInt(stock) || 0);
+        formData.append('photo', imageFile);
+        formData.append('image', imageFile);
+        formData.append('file', imageFile);
+        formData.append('image_url', image || '');
+
+        if (editingProduct) {
+          res = await apiClient.upload(`/admin/products/${editingProduct.id}`, formData, 'PUT');
+        } else {
+          res = await apiClient.upload('/admin/products', formData, 'POST');
+        }
       } else {
-        res = await apiClient.post('/admin/products', payload);
+        // JSON payload
+        const payload = {
+          name: name.trim(),
+          slug: cleanSlug,
+          price: parseFloat(price) || 0.00,
+          stock: parseInt(stock) || 0,
+          image: image.trim(),
+          photo: image.trim(),
+          image_url: image.trim()
+        };
+
+        if (editingProduct) {
+          res = await apiClient.put(`/admin/products/${editingProduct.id}`, payload);
+        } else {
+          res = await apiClient.post('/admin/products', payload);
+        }
       }
 
       if (res.success) {
@@ -148,13 +304,23 @@ export default function ProductsPage() {
             Manage your store items, prices, and stock inventory.
           </p>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="py-2.5 px-4 bg-primary text-primary-foreground font-bold text-xs rounded-xl hover:bg-primary/95 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Product</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleLoadDemoProducts}
+            className="py-2.5 px-4 bg-secondary text-secondary-foreground font-semibold text-xs rounded-xl hover:bg-secondary/80 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shadow-sm border border-border/50"
+            title="Load demo products into catalog"
+          >
+            <Sparkles className="w-4 h-4 text-primary" />
+            <span>Load Demo Data</span>
+          </button>
+          <button
+            onClick={() => handleOpenModal()}
+            className="py-2.5 px-4 bg-primary text-primary-foreground font-bold text-xs rounded-xl hover:bg-primary/95 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Product</span>
+          </button>
+        </div>
       </div>
 
       {/* Toolbar */}
@@ -184,7 +350,14 @@ export default function ProductsPage() {
           <div className="p-12 text-center text-muted-foreground">
             <Package className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
             <p className="font-semibold">No products found</p>
-            <p className="text-xs mt-1">Create your first product item to get started.</p>
+            <p className="text-xs mt-1">Create your first product item or populate realistic demo data.</p>
+            <button
+              onClick={handleLoadDemoProducts}
+              className="mt-4 px-4 py-2 bg-primary text-primary-foreground text-xs font-semibold rounded-xl hover:bg-primary/90 transition inline-flex items-center gap-2 cursor-pointer shadow-sm active:scale-95"
+            >
+              <Sparkles className="w-4 h-4" />
+              Load Demo Products
+            </button>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -276,7 +449,18 @@ export default function ProductsPage() {
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1">Product Name *</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-muted-foreground">Product Name *</label>
+              <button
+                type="button"
+                onClick={handleFillFakeData}
+                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+                title="Fill form with realistic fake demo data"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>✨ Fill Fake Data</span>
+              </button>
+            </div>
             <input
               type="text"
               required
@@ -286,15 +470,74 @@ export default function ProductsPage() {
               className="w-full px-3 py-2 text-sm bg-background border border-border/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
           </div>
+          {/* Product Image Section */}
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1">Product Image URL / Upload Path</label>
-            <input
-              type="text"
-              placeholder="e.g. /uploads/products/headphone.jpg or https://..."
-              value={image}
-              onChange={(e) => setImage(e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-background border border-border/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/40"
-            />
+            <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Product Photo</label>
+            <div className="flex flex-col sm:flex-row items-center gap-4 p-3.5 rounded-xl border border-border/80 bg-muted/20">
+              {/* Thumbnail Preview */}
+              <div className="relative w-20 h-20 rounded-xl border-2 border-border/70 bg-card overflow-hidden shadow-inner flex shrink-0 items-center justify-center">
+                {previewUrl ? (
+                  <img
+                    src={previewUrl}
+                    alt="Product preview"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+                <div className={`w-full h-full flex items-center justify-center bg-secondary/40 text-muted-foreground ${previewUrl ? 'hidden' : 'flex'}`}>
+                  <Package className="w-8 h-8 opacity-40" />
+                </div>
+              </div>
+
+              {/* Upload Controls & URL fallback */}
+              <div className="flex-1 space-y-2.5 w-full">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="px-3.5 py-2 bg-primary text-primary-foreground font-semibold rounded-xl text-xs transition cursor-pointer hover:bg-primary/90 flex items-center gap-1.5 shadow-sm active:scale-95">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload Image</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {previewUrl && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveImage}
+                      className="px-3 py-2 border border-destructive/20 bg-destructive/5 hover:bg-destructive/10 text-destructive font-semibold rounded-xl text-xs transition cursor-pointer flex items-center gap-1.5 active:scale-95"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Remove</span>
+                    </button>
+                  )}
+                </div>
+
+                <div>
+                  <input
+                    type="text"
+                    value={image}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setImage(val);
+                      if (val) {
+                        setImageFile(null);
+                        setPreviewUrl(val);
+                      } else if (!imageFile) {
+                        setPreviewUrl('');
+                      }
+                    }}
+                    placeholder="Or paste Image URL (https://... or /uploads/...)"
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-border/70 bg-background text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

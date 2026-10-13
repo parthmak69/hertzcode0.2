@@ -1,4 +1,4 @@
-const crypto = require('crypto')
+import crypto from 'crypto';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'squadera-admin-master-jwt-token-secret-key-1234!xyz'
 

@@ -891,7 +891,7 @@ export async function createRecord(req, res) {
     // Normalize aliases
     if (body.parentId !== undefined && body.parent_id === undefined) body.parent_id = body.parentId;
     if (body.imageUrl !== undefined && body.image_url === undefined) body.image_url = body.imageUrl;
-    if (body.primary_image_url !== undefined) body.image_url = body.primary_image_url;
+    if (body.primary_image_url !== undefined && body.image_url === undefined) body.image_url = body.primary_image_url;
     if (body.primaryImageAction === 'remove') {
       body.image_url = '';
       body.profile_image = '';
@@ -900,6 +900,50 @@ export async function createRecord(req, res) {
     if (body.documentFileAction === 'remove') {
       body.document_file_url = '';
       body.file_url = '';
+    }
+
+    let colNames = new Set();
+    let colDefs = [];
+    try {
+      const [colRows] = await pool.query("SHOW COLUMNS FROM \\x60" + '${file.tableName}' + "\\x60");
+      colDefs = colRows || [];
+      colNames = new Set(colDefs.map(c => c.Field));
+    } catch(e) {}
+
+    // Normalization of common aliases to match actual table schema
+    if (colNames.has('text_title') && !body.text_title) {
+      body.text_title = body.title || body.name || body.record_name || body.full_name || 'Untitled';
+    }
+    if (colNames.has('title') && !body.title) {
+      body.title = body.text_title || body.name || body.record_name || 'Untitled';
+    }
+    if (colNames.has('name') && !body.name) {
+      body.name = body.text_title || body.title || body.full_name || 'Untitled';
+    }
+    if (colNames.has('password_hash')) {
+      if (!body.password_hash && body.password) {
+        body.password_hash = body.password;
+      } else if (!body.password_hash && !body.password) {
+        body.password_hash = '$unusable$' + Math.random().toString(36).substring(2);
+      }
+    } else if (colNames.has('password')) {
+      if (!body.password && body.password_hash) {
+        body.password = body.password_hash;
+      } else if (!body.password && !body.password_hash) {
+        body.password = '$unusable$' + Math.random().toString(36).substring(2);
+      }
+    }
+    if (colNames.has('photo') && !body.photo && (body.image_url || body.primary_image_url)) {
+      body.photo = body.image_url || body.primary_image_url;
+    }
+    if (colNames.has('image_url') && !body.image_url && (body.photo || body.primary_image_url)) {
+      body.image_url = body.photo || body.primary_image_url;
+    }
+    if (colNames.has('switch_active') && body.switch_active === undefined && body.is_active !== undefined) {
+      body.switch_active = body.is_active ? 1 : 0;
+    }
+    if (colNames.has('is_active') && body.is_active === undefined && body.switch_active !== undefined) {
+      body.is_active = body.switch_active ? 1 : 0;
     }
 
     // Stringify JSON array/object structures before insertion
@@ -915,18 +959,43 @@ export async function createRecord(req, res) {
     const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
     if (!body.createdOn && !body.created_on && !body.created_at) body.createdOn = nowStr;
 
+    // Auto-generate slug if missing
+    if (!body.slug && (body.name || body.title || body.text_title || body.text)) {
+      body.slug = String(body.name || body.title || body.text_title || body.text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') + '-' + Date.now();
+    }
+
+    // Ensure required NOT NULL columns without default have fallback values
+    if (colDefs.length > 0) {
+      colDefs.forEach(c => {
+        if (c.Null === 'NO' && !c.Extra?.includes('auto_increment') && c.Default === null && c.Key !== 'PRI') {
+          if (body[c.Field] === undefined || body[c.Field] === null || body[c.Field] === '') {
+            if (c.Type.includes('int') || c.Type.includes('decimal') || c.Type.includes('float')) {
+              body[c.Field] = 0;
+            } else if (c.Type.includes('date') || c.Type.includes('time')) {
+              body[c.Field] = nowStr;
+            } else {
+              body[c.Field] = body.text_title || body.title || body.name || 'Default';
+            }
+          }
+        }
+      });
+    }
+
+    // Filter entries to existing table columns if column inspection succeeded
     const validEntries = Object.entries(body).filter(([k, v]) => 
       !k.includes('_file') && 
       k !== 'primaryImageAction' && 
       k !== 'documentFileAction' && 
       k !== 'parentId' &&
+      (colNames.size === 0 || colNames.has(k)) &&
       !(k === '${pkField}' && (v === null || v === '' || v === undefined))
     );
     
     if (validEntries.length === 0) {
       const fallbackName = req.query.name || body.name || body.text_title || body.title || 'New Item';
+      const colToUse = colNames.has('title') ? 'title' : (colNames.has('text_title') ? 'text_title' : 'name');
       try {
-        const [result] = await pool.execute("INSERT INTO \\x60" + '${file.tableName}' + "\\x60 (\\x60name\\x60) VALUES (?)", [fallbackName]);
+        const [result] = await pool.execute("INSERT INTO \\x60" + '${file.tableName}' + "\\x60 (\\x60" + colToUse + "\\x60) VALUES (?)", [fallbackName]);
         return res.json({ success: true, insertId: result.insertId });
       } catch(e) {
         return res.status(500).json({ success: false, error: 'Failed to create fallback entry: ' + e.message });
@@ -952,7 +1021,9 @@ export async function createRecord(req, res) {
           
           for (const key of keys) {
             if (!existingColNames.has(key)) {
-              await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60" + key + "\\x60 TEXT NULL DEFAULT NULL");
+              const isKeyOrSlug = key.toLowerCase().includes('slug') || key.toLowerCase().includes('email') || key.toLowerCase().includes('user') || key.toLowerCase().includes('name') || key.toLowerCase().includes('code');
+              const colType = isKeyOrSlug ? 'VARCHAR(255)' : 'TEXT';
+              await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60" + key + "\\x60 " + colType + " NULL DEFAULT NULL");
             }
           }
           const [retryResult] = await pool.execute(query, values);
@@ -970,7 +1041,9 @@ export async function createRecord(req, res) {
         try {
           const [cols] = await pool.query("SHOW COLUMNS FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60Null\\x60 = 'NO' AND \\x60Extra\\x60 NOT LIKE '%auto_increment%' AND \\x60Default\\x60 IS NULL AND \\x60Key\\x60 != 'PRI'");
           for (const c of cols) {
-            await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + c.Field + "\\x60 TEXT NULL DEFAULT NULL");
+            const isKeyOrSlug = (c.Key && c.Key !== '') || c.Field.toLowerCase().includes('slug') || c.Field.toLowerCase().includes('email') || c.Field.toLowerCase().includes('user') || c.Field.toLowerCase().includes('name') || c.Field.toLowerCase().includes('code');
+            const colType = isKeyOrSlug ? 'VARCHAR(255)' : 'TEXT';
+            await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 MODIFY COLUMN \\x60" + c.Field + "\\x60 " + colType + " NULL DEFAULT NULL");
           }
           const [retryResult] = await pool.execute(query, values);
           return res.json({ success: true, insertId: retryResult.insertId });
@@ -1003,7 +1076,7 @@ export async function updateRecord(req, res) {
 
     if (body.parentId !== undefined && body.parent_id === undefined) body.parent_id = body.parentId;
     if (body.imageUrl !== undefined && body.image_url === undefined) body.image_url = body.imageUrl;
-    if (body.primary_image_url !== undefined) body.image_url = body.primary_image_url;
+    if (body.primary_image_url !== undefined && body.image_url === undefined) body.image_url = body.primary_image_url;
     if (body.primaryImageAction === 'remove') {
       body.image_url = '';
       body.profile_image = '';
@@ -1012,6 +1085,41 @@ export async function updateRecord(req, res) {
     if (body.documentFileAction === 'remove') {
       body.document_file_url = '';
       body.file_url = '';
+    }
+
+    let colNames = new Set();
+    try {
+      const [colRows] = await pool.query("SHOW COLUMNS FROM \\x60" + '${file.tableName}' + "\\x60");
+      colNames = new Set((colRows || []).map(c => c.Field));
+    } catch(e) {}
+
+    // Normalization of common aliases to match actual table schema
+    if (colNames.has('text_title') && !body.text_title && body.title) {
+      body.text_title = body.title;
+    }
+    if (colNames.has('title') && !body.title && body.text_title) {
+      body.title = body.text_title;
+    }
+    if (colNames.has('name') && !body.name && (body.title || body.text_title)) {
+      body.name = body.title || body.text_title;
+    }
+    if (colNames.has('password_hash') && !body.password_hash && body.password) {
+      body.password_hash = body.password;
+    }
+    if (colNames.has('password') && !body.password && body.password_hash) {
+      body.password = body.password_hash;
+    }
+    if (colNames.has('photo') && !body.photo && (body.image_url || body.primary_image_url)) {
+      body.photo = body.image_url || body.primary_image_url;
+    }
+    if (colNames.has('image_url') && !body.image_url && (body.photo || body.primary_image_url)) {
+      body.image_url = body.photo || body.primary_image_url;
+    }
+    if (colNames.has('switch_active') && body.switch_active === undefined && body.is_active !== undefined) {
+      body.switch_active = body.is_active ? 1 : 0;
+    }
+    if (colNames.has('is_active') && body.is_active === undefined && body.switch_active !== undefined) {
+      body.is_active = body.switch_active ? 1 : 0;
     }
 
     // Stringify JSON array/object structures before updating
@@ -1026,6 +1134,7 @@ export async function updateRecord(req, res) {
       k !== 'primaryImageAction' && 
       k !== 'documentFileAction' && 
       k !== 'parentId' &&
+      (colNames.size === 0 || colNames.has(k)) &&
       k !== '${pkField}'
     );
 
@@ -1051,7 +1160,9 @@ export async function updateRecord(req, res) {
           
           for (const key of keys) {
             if (!existingColNames.has(key)) {
-              await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60" + key + "\\x60 TEXT NULL DEFAULT NULL");
+              const isKeyOrSlug = key.toLowerCase().includes('slug') || key.toLowerCase().includes('email') || key.toLowerCase().includes('user') || key.toLowerCase().includes('name') || key.toLowerCase().includes('code');
+              const colType = isKeyOrSlug ? 'VARCHAR(255)' : 'TEXT';
+              await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60" + key + "\\x60 " + colType + " NULL DEFAULT NULL");
             }
           }
           const [retryResult] = await pool.execute(query, [...values, id]);
@@ -1328,6 +1439,14 @@ function generateRouterCode(file, apiTarget = "admin") {
   const hyphenPlural = pluralName.replace(/_/g, '-');
   const underscorePlural = pluralName.replace(/-/g, '_');
 
+  const isCategoryModule = file.premiumType === 'categories' || file.name.toLowerCase().includes('cat') || file.name.toLowerCase().includes('ctae') || file.name.toLowerCase().includes('ctag');
+  const extraCategoryBase = isCategoryModule ? ['/categories', '/category', '/admin/categories', '/admin/category', '/api/admin/categories', '/api/admin/category'] : [];
+  const extraCategoryId = isCategoryModule ? ['/categories/:id', '/category/:id', '/admin/categories/:id', '/admin/category/:id', '/api/admin/categories/:id', '/api/admin/category/:id'] : [];
+
+  const isSettingsModule = file.premiumType === 'settings' || file.premiumType === 'setting' || file.name.toLowerCase().includes('setting');
+  const extraSettingsBase = isSettingsModule ? ['/settings', '/setting', '/admin/settings', '/admin/setting', '/api/admin/settings', '/api/admin/setting'] : [];
+  const extraSettingsId = isSettingsModule ? ['/settings/:id', '/setting/:id', '/admin/settings/:id', '/admin/setting/:id', '/api/admin/settings/:id', '/api/admin/setting/:id'] : [];
+
   const basePaths = JSON.stringify(Array.from(new Set([
     '/',
     `/${file.name}`,
@@ -1338,7 +1457,18 @@ function generateRouterCode(file, apiTarget = "admin") {
     `/${hyphenPlural}`,
     `/${underscorePlural}`,
     '/admin',
-    '/admins'
+    '/admins',
+    `/admin/${file.name}`,
+    `/admin/${hyphenName}`,
+    `/admin/${underscoreName}`,
+    `/admin/${singularName}`,
+    `/admin/${pluralName}`,
+    `/admin/${hyphenPlural}`,
+    `/admin/${underscorePlural}`,
+    `/api/admin/${file.name}`,
+    `/api/admin/${pluralName}`,
+    ...extraCategoryBase,
+    ...extraSettingsBase
   ])));
 
   const idPaths = JSON.stringify(Array.from(new Set([
@@ -1349,7 +1479,18 @@ function generateRouterCode(file, apiTarget = "admin") {
     `/${singularName}/:id`,
     `/${pluralName}/:id`,
     `/${hyphenPlural}/:id`,
-    `/${underscorePlural}/:id`
+    `/${underscorePlural}/:id`,
+    `/admin/${file.name}/:id`,
+    `/admin/${hyphenName}/:id`,
+    `/admin/${underscoreName}/:id`,
+    `/admin/${singularName}/:id`,
+    `/admin/${pluralName}/:id`,
+    `/admin/${hyphenPlural}/:id`,
+    `/admin/${underscorePlural}/:id`,
+    `/api/admin/${file.name}/:id`,
+    `/api/admin/${pluralName}/:id`,
+    ...extraCategoryId,
+    ...extraSettingsId
   ])));
 
   const bulkPaths = JSON.stringify(Array.from(new Set([
@@ -1762,6 +1903,103 @@ app.get(['/testing/fake-data', '/api/testing/fake-data'], (req, res) => {
     });
   }
 
+  if (type === 'portfolio' || type === 'portfolio_card' || type === 'portfolio_cards') {
+    const samplePortfolios = [
+      {
+        title: 'NextGen AI Analytics Platform',
+        description: 'Cloud-native analytics dashboard offering real-time streaming queries, interactive visual charts, and automated alerts.',
+        category: 'Development',
+        button_link: 'https://github.com/example/ai-analytics',
+        image_url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80',
+        switch_active: 1
+      },
+      {
+        title: 'Fintech Crypto Mobile Wallet',
+        description: 'Non-custodial crypto wallet interface featuring biometrics authentication, hardware keys support, and instant swaps.',
+        category: 'Development',
+        button_link: 'https://github.com/example/crypto-wallet',
+        image_url: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=800&q=80',
+        switch_active: 1
+      },
+      {
+        title: 'NeoBrutalism Design System UI Kit',
+        description: 'Award-winning design tokens, accessible components, and Figma UI kit tailored for modern SaaS startups.',
+        category: 'Design',
+        button_link: 'https://dribbble.com/example-neobrutalism',
+        image_url: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=800&q=80',
+        switch_active: 1
+      },
+      {
+        title: 'OmniChannel Marketing Growth Suite',
+        description: 'Campaign automation engine with multivariate A/B testing and AI copy generation.',
+        category: 'Marketing',
+        button_link: 'https://example.com/growth-suite',
+        image_url: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80',
+        switch_active: 1
+      },
+      {
+        title: 'ZenTask Agile Productivity Workspace',
+        description: 'Collaborative sprint management tool combining Kanban boards, Gantt charts, and calendar timelines.',
+        category: 'Productivity',
+        button_link: 'https://example.com/zentask',
+        image_url: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?auto=format&fit=crop&w=800&q=80',
+        switch_active: 1
+      },
+      {
+        title: 'Luxury Retail Brand Identity',
+        description: 'Comprehensive visual branding including packaging typography, spatial design, and social media templates.',
+        category: 'Design',
+        button_link: 'https://behance.net/example-luxury-brand',
+        image_url: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80',
+        switch_active: 1
+      }
+    ];
+    const picked = samplePortfolios[Math.floor(Math.random() * samplePortfolios.length)];
+    return res.json({ success: true, data: picked });
+  }
+
+  if (type === 'product' || type === 'products') {
+    const sampleProducts = [
+      { name: 'Sony WH-1000XM5 Wireless Headphones', price: 399.99, stock: 45, photo: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80', description: 'Industry-leading noise cancellation with studio quality acoustic performance.' },
+      { name: 'Apple Watch Series 9 GPS 45mm', price: 429.00, stock: 28, photo: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80', description: 'Advanced fitness tracking, always-on Retina display, and blood oxygen sensor.' },
+      { name: 'Logitech MX Master 3S Wireless Mouse', price: 99.99, stock: 60, photo: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=600&q=80', description: 'Quiet click performance mouse with 8K DPI any-surface optical sensor.' }
+    ];
+    const picked = sampleProducts[Math.floor(Math.random() * sampleProducts.length)];
+    return res.json({ success: true, data: picked });
+  }
+
+  if (type === 'admin' || type === 'admins') {
+    const sampleAdmins = [
+      { name: 'Sarah Connor', email: 'sarah.connor@example.com', role: 'Admin' },
+      { name: 'Marcus Vance', email: 'marcus.vance@example.com', role: 'Editor' },
+      { name: 'Elena Rostova', email: 'elena.r@example.com', role: 'Manager' },
+      { name: 'David Kim', email: 'david.kim@example.com', role: 'Admin' }
+    ];
+    const picked = sampleAdmins[Math.floor(Math.random() * sampleAdmins.length)];
+    return res.json({ success: true, data: picked });
+  }
+
+  if (type === 'setting' || type === 'settings') {
+    const sampleSettings = [
+      { setting_key: 'company_tax_id', setting_value: 'TAX-US-9823101', description: 'Federal tax identification code for sales reporting' },
+      { setting_key: 'invoice_prefix', setting_value: 'INV-2026-', description: 'Standard billing serial number prefix' },
+      { setting_key: 'session_timeout_minutes', setting_value: '60', description: 'Auto logout duration for idle administrators' },
+      { setting_key: 'email_sender_name', setting_value: 'Hertzcode Support', description: 'Sender name on outgoing transactional emails' }
+    ];
+    const picked = sampleSettings[Math.floor(Math.random() * sampleSettings.length)];
+    return res.json({ success: true, data: picked });
+  }
+
+  if (type === 'order' || type === 'orders') {
+    const sampleOrders = [
+      { customer_name: 'Alexander Wright', customer_email: 'alex.wright@example.com', customer_phone: '+1 (555) 234-5678', shipping_address: '742 Evergreen Terrace, Springfield, OR', total_amount: 249.99, payment_method: 'Credit Card', status: 'Completed' },
+      { customer_name: 'Sophia Martinez', customer_email: 'sophia.m@example.com', customer_phone: '+1 (555) 876-5432', shipping_address: '120 Broadway Ave, New York, NY', total_amount: 189.50, payment_method: 'PayPal', status: 'Processing' },
+      { customer_name: 'David Chen', customer_email: 'david.chen@example.com', customer_phone: '+1 (555) 345-6789', shipping_address: '45 Market Street, San Francisco, CA', total_amount: 368.99, payment_method: 'COD', status: 'Pending' }
+    ];
+    const picked = sampleOrders[Math.floor(Math.random() * sampleOrders.length)];
+    return res.json({ success: true, data: picked });
+  }
+
   const randomCat = fakeCategories[Math.floor(Math.random() * fakeCategories.length)];
   res.json({ success: true, data: randomCat });
 });
@@ -1810,19 +2048,37 @@ export async function loadMvcRoutes() {
             const aliases = new Set([tableName, singularName, pluralName]);
 
             const lowerTable = tableName.toLowerCase();
-            if (lowerTable.includes('cat') || lowerTable.includes('categor') || lowerTable.includes('cateoger')) {
+            if (
+              lowerTable.includes('cat') || 
+              lowerTable.includes('categor') || 
+              lowerTable.includes('cateoger') || 
+              lowerTable.includes('ctae') || 
+              lowerTable.includes('ctag') || 
+              lowerTable.includes('categ')
+            ) {
               aliases.add('category');
               aliases.add('categories');
+              aliases.add('ctaegorie');
+              aliases.add('ctaegories');
               aliases.add('cateogerie');
               aliases.add('cateogeries');
               aliases.add('product_category');
               aliases.add('product_categories');
+              aliases.add('product_categorys');
             }
             if (lowerTable.includes('portfolio')) {
               aliases.add('portfolio');
               aliases.add('portfolios');
               aliases.add('portfolio-categories');
               aliases.add('portfolio_categories');
+            }
+            if (lowerTable.includes('setting')) {
+              aliases.add('setting');
+              aliases.add('settings');
+              aliases.add('system_settings');
+              aliases.add('system-settings');
+              aliases.add('site_settings');
+              aliases.add('site-settings');
             }
             if (lowerTable.includes('admin')) {
               aliases.add('admin');
@@ -1906,29 +2162,29 @@ startServer();
     }
   }
 
-  // Rewrite API_BASE_URL in the generated frontend to point to our Express Backend
-  const adminApiJsPath = path.join(adminDir, "utils", "api.js");
-  if (fs.existsSync(adminApiJsPath)) {
-    let apiJsContent = fs.readFileSync(adminApiJsPath, "utf8");
-    apiJsContent = apiJsContent.replace(
-      /export const API_BASE_URL = ['"][^'"]*['"]/g,
-      "export const API_BASE_URL = 'http://localhost:5001'"
-    );
-    fs.writeFileSync(adminApiJsPath, apiJsContent, "utf8");
-  }
-
-  // Always copy/sync core UI components and Auth files from template to target project
+  // Always copy/sync core UI components, dashboard, layout and auth files from template to target project
   const syncFiles = [
     { src: path.join(templateSource, "components", "forms", "MasterForm.jsx"), dest: path.join(adminDir, "components", "forms", "MasterForm.jsx") },
     { src: path.join(templateSource, "components", "ui", "DataTable.jsx"), dest: path.join(adminDir, "components", "ui", "DataTable.jsx") },
+    { src: path.join(templateSource, "components", "layout", "Header.jsx"), dest: path.join(adminDir, "components", "layout", "Header.jsx") },
+    { src: path.join(templateSource, "components", "forms", "AdminsForm.jsx"), dest: path.join(adminDir, "components", "forms", "AdminsForm.jsx") },
+    { src: path.join(templateSource, "components", "modals", "PortfolioModal.jsx"), dest: path.join(adminDir, "components", "modals", "PortfolioModal.jsx") },
+    { src: path.join(templateSource, "app", "layout.jsx"), dest: path.join(adminDir, "app", "layout.jsx") },
+    { src: path.join(templateSource, "app", "dashboard", "page.jsx"), dest: path.join(adminDir, "app", "dashboard", "page.jsx") },
+    { src: path.join(templateSource, "app", "dynamic-tables", "page.jsx"), dest: path.join(adminDir, "app", "dynamic-tables", "page.jsx") },
     { src: path.join(templateSource, "app", "login", "page.jsx"), dest: path.join(adminDir, "app", "login", "page.jsx") },
     { src: path.join(templateSource, "utils", "api.js"), dest: path.join(adminDir, "utils", "api.js") },
+    { src: path.join(templateSource, "next.config.js"), dest: path.join(adminDir, "next.config.js") },
     { src: path.resolve(controllerDir, "../routes/authRoutes.js"), dest: path.join(backendDir, "routes", "authRoutes.js") },
   ];
 
   syncFiles.forEach(({ src, dest }) => {
-    if (fs.existsSync(src) && fs.existsSync(path.dirname(dest))) {
+    if (fs.existsSync(src)) {
       try {
+        const destDir = path.dirname(dest);
+        if (!fs.existsSync(destDir)) {
+          fs.mkdirSync(destDir, { recursive: true });
+        }
         fs.copyFileSync(src, dest);
         console.log(`Synced template file to ${dest}`);
       } catch (e) {

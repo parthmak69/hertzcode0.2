@@ -7,7 +7,7 @@ import PortfolioCategoryModal from '@/components/modals/PortfolioCategoryModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import Pagination from '@/components/ui/Pagination'
 import Modal from '@/components/ui/Modal'
-import { apiClient } from '@/utils/api'
+import { apiClient, getImageUrl } from '@/utils/api'
 import { 
     Plus, 
     Search, 
@@ -23,7 +23,8 @@ import {
     Folder,
     ChevronRight,
     ArrowLeft,
-    Shuffle
+    Shuffle,
+    Sparkles
 } from 'lucide-react'
 
 // Tab definitions for Categories
@@ -60,6 +61,82 @@ export default function PortfolioPage() {
         }
     }
 
+    const [seedLoading, setSeedLoading] = useState(false)
+
+    const handleSeedDemoCards = async () => {
+        setSeedLoading(true)
+        try {
+            const demoCards = [
+                {
+                    title: 'NextGen AI Analytics Platform',
+                    description: 'Cloud-native analytics dashboard offering real-time streaming queries, interactive visual charts, and automated alerts.',
+                    category: 'Development',
+                    button_link: 'https://github.com/example/ai-analytics',
+                    image_url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80',
+                    switch_active: 1
+                },
+                {
+                    title: 'Fintech Crypto Mobile Wallet',
+                    description: 'Non-custodial crypto wallet interface featuring biometrics authentication, hardware keys support, and instant swaps.',
+                    category: 'Development',
+                    button_link: 'https://github.com/example/crypto-wallet',
+                    image_url: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=800&q=80',
+                    switch_active: 1
+                },
+                {
+                    title: 'NeoBrutalism Design System UI Kit',
+                    description: 'Award-winning design tokens, accessible components, and Figma UI kit tailored for modern SaaS startups.',
+                    category: 'Design',
+                    button_link: 'https://dribbble.com/example-neobrutalism',
+                    image_url: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=800&q=80',
+                    switch_active: 1
+                },
+                {
+                    title: 'OmniChannel Marketing Growth Suite',
+                    description: 'Campaign automation engine with multivariate A/B testing and AI copy generation.',
+                    category: 'Marketing',
+                    button_link: 'https://example.com/growth-suite',
+                    image_url: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80',
+                    switch_active: 1
+                },
+                {
+                    title: 'ZenTask Agile Productivity Workspace',
+                    description: 'Collaborative sprint management tool combining Kanban boards, Gantt charts, and calendar timelines.',
+                    category: 'Productivity',
+                    button_link: 'https://example.com/zentask',
+                    image_url: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?auto=format&fit=crop&w=800&q=80',
+                    switch_active: 1
+                },
+                {
+                    title: 'Luxury Retail Brand Identity',
+                    description: 'Comprehensive visual branding including packaging typography, spatial design, and social media templates.',
+                    category: 'Design',
+                    button_link: 'https://behance.net/example-luxury-brand',
+                    image_url: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80',
+                    switch_active: 1
+                }
+            ]
+
+            const requiredCats = ['Development', 'Design', 'Marketing', 'Productivity']
+            for (const catName of requiredCats) {
+                if (!portfolioCategories.some(c => c.name === catName)) {
+                    await apiClient.post('/admin/portfolio-categories', { name: catName }).catch(() => null)
+                }
+            }
+
+            for (const card of demoCards) {
+                await create(card).catch(() => null)
+            }
+
+            await fetchPortfolioCategories()
+            refetch()
+        } catch (err) {
+            console.error('Seed demo cards error:', err)
+        } finally {
+            setSeedLoading(false)
+        }
+    }
+
     useEffect(() => {
         fetchPortfolioCategories()
     }, [])
@@ -93,7 +170,9 @@ export default function PortfolioPage() {
     })
 
     const categoriesList = useMemo(() => {
-        return portfolioCategories.map(cat => cat.name)
+        const customCats = portfolioCategories.map(cat => cat.name).filter(Boolean)
+        if (customCats.length > 0) return customCats
+        return CATEGORY_TABS.map(t => t.value).filter(Boolean)
     }, [portfolioCategories])
 
     // Reset selected IDs when category changes
@@ -438,6 +517,20 @@ export default function PortfolioPage() {
                         </button>
                     )}
                     <button
+                        type="button"
+                        onClick={handleSeedDemoCards}
+                        disabled={seedLoading}
+                        className="w-full sm:w-auto px-4 py-2.5 bg-secondary text-foreground hover:bg-secondary/80 font-bold rounded-xl transition active:scale-98 cursor-pointer flex items-center justify-center gap-2 border border-border/60 shadow-sm text-sm disabled:opacity-50"
+                        title="Seed realistic demo portfolio cards & categories"
+                    >
+                        {seedLoading ? (
+                            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                            <Sparkles className="w-4 h-4 text-primary" />
+                        )}
+                        <span>✨ Load Demo Cards</span>
+                    </button>
+                    <button
                         onClick={() => setIsCatModalOpen(true)}
                         className="w-full sm:w-auto px-4 py-2.5 bg-secondary text-foreground hover:bg-secondary/80 font-semibold rounded-xl transition active:scale-98 cursor-pointer flex items-center justify-center gap-2 border border-border/60 shadow-sm text-sm"
                     >
@@ -466,16 +559,31 @@ export default function PortfolioPage() {
                             <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                         </div>
                     ) : categoriesSummary.length === 0 ? (
-                        <div className="text-center py-20 border border-dashed rounded-2xl border-border/80 bg-card">
+                        <div className="text-center py-20 border border-dashed rounded-2xl border-border/80 bg-card flex flex-col items-center justify-center p-6">
                             <Folder className="w-12 h-12 mx-auto text-muted-foreground/30 mb-3" />
                             <h3 className="text-base font-bold text-foreground">No Category Folders Found</h3>
-                            <p className="text-xs text-muted-foreground mt-1 mb-4">Create your first category folder to start organizing portfolio cards.</p>
-                            <button
-                                onClick={() => setIsCatModalOpen(true)}
-                                className="px-4 py-2 bg-primary text-primary-foreground font-semibold text-xs rounded-xl hover:bg-primary/95 transition active:scale-98 cursor-pointer flex items-center gap-1.5 mx-auto shadow-sm"
-                            >
-                                <Plus className="w-3.5 h-3.5" /> Create Folder
-                            </button>
+                            <p className="text-xs text-muted-foreground mt-1 mb-5 max-w-sm">Create your first category folder or load realistic demo portfolio cards.</p>
+                            <div className="flex flex-wrap items-center justify-center gap-3">
+                                <button
+                                    onClick={() => setIsCatModalOpen(true)}
+                                    className="px-4 py-2 bg-primary text-primary-foreground font-semibold text-xs rounded-xl hover:bg-primary/95 transition active:scale-98 cursor-pointer flex items-center gap-1.5 shadow-sm"
+                                >
+                                    <Plus className="w-3.5 h-3.5" /> Create Folder
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleSeedDemoCards}
+                                    disabled={seedLoading}
+                                    className="px-4 py-2 bg-secondary text-foreground hover:bg-secondary/80 font-bold text-xs rounded-xl border border-border/80 transition active:scale-98 cursor-pointer flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                                >
+                                    {seedLoading ? (
+                                        <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                    ) : (
+                                        <Sparkles className="w-3.5 h-3.5 text-primary" />
+                                    )}
+                                    <span>✨ Load Demo Cards</span>
+                                </button>
+                            </div>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 pt-2 animate-in fade-in duration-300">
@@ -498,7 +606,7 @@ export default function PortfolioPage() {
                                     <div className="relative aspect-video w-full overflow-hidden bg-muted/40 border-b border-border/40">
                                         {sum.cover_image ? (
                                             <img
-                                                src={sum.cover_image.startsWith('http') ? sum.cover_image : `http://localhost:5001/${sum.cover_image}`}
+                                                src={getImageUrl(sum.cover_image)}
                                                 alt={sum.category}
                                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                             />
@@ -640,12 +748,37 @@ export default function PortfolioPage() {
                                 <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                             </div>
                         ) : filteredData.length === 0 ? (
-                            <div className="text-center py-20 border border-dashed rounded-2xl border-border/80">
+                            <div className="text-center py-20 border border-dashed rounded-2xl border-border/80 flex flex-col items-center justify-center p-6">
                                 <ImageIcon className="w-12 h-12 mx-auto text-muted-foreground/30 mb-3" />
                                 <h3 className="text-base font-bold text-foreground">No Cards Found</h3>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    {searchQuery ? 'Adjust your search query to find matching cards.' : 'Add your first portfolio card to this category.'}
+                                <p className="text-xs text-muted-foreground mt-1 mb-5 max-w-sm">
+                                    {searchQuery ? 'Adjust your search query to find matching cards.' : 'Add your first portfolio card or load realistic demo starter cards.'}
                                 </p>
+                                <div className="flex flex-wrap items-center justify-center gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setEditingRecord(null)
+                                            setIsModalOpen(true)
+                                        }}
+                                        className="px-4 py-2 bg-primary text-primary-foreground font-semibold text-xs rounded-xl hover:bg-primary/95 transition active:scale-98 cursor-pointer flex items-center gap-1.5 shadow-sm"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" /> Add Portfolio Card
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSeedDemoCards}
+                                        disabled={seedLoading}
+                                        className="px-4 py-2 bg-secondary text-foreground hover:bg-secondary/80 font-bold text-xs rounded-xl border border-border/80 transition active:scale-98 cursor-pointer flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                                    >
+                                        {seedLoading ? (
+                                            <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                        ) : (
+                                            <Sparkles className="w-3.5 h-3.5 text-primary" />
+                                        )}
+                                        <span>✨ Load Demo Cards</span>
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pt-2">
@@ -669,7 +802,7 @@ export default function PortfolioPage() {
                                             <div className="relative aspect-video w-full overflow-hidden bg-muted/40 border-b border-border/40 select-none">
                                                 {item.image_url ? (
                                                     <img
-                                                        src={`http://localhost:5001/${item.image_url}`}
+                                                        src={getImageUrl(item.image_url)}
                                                         alt={item.title}
                                                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                                     />

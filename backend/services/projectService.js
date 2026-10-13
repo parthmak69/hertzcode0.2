@@ -82,3 +82,4 @@ export async function saveProjectsList(projects) {
     await dbQuery(sql, params, 0, 'SaveProject', metaDb);
   }
 }
+  

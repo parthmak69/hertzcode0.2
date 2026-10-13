@@ -57,9 +57,20 @@ export default function CategoriesPage() {
     const fetchAllCategories = async () => {
         setLoading(true)
         try {
-            const res = await apiClient.get('/admin/categories?parentId=all')
-            if (res.success) {
-                setAllCategories(res.data || [])
+            let res = await apiClient.get('/admin/categories?parentId=all')
+            if (!res || !res.success) {
+                res = await apiClient.get('/categories?parentId=all')
+            }
+            if (res && res.success) {
+                const list = res.data || []
+                if (list.length === 0) {
+                    const seedRes = await apiClient.post('/admin/categories/seed', {}).catch(() => null)
+                    if (seedRes && seedRes.success && seedRes.data?.length > 0) {
+                        setAllCategories(seedRes.data)
+                        return
+                    }
+                }
+                setAllCategories(list)
             }
         } catch (err) {
             console.error('Fetch all categories error:', err)

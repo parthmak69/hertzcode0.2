@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Modal from '@/components/ui/Modal'
-import { X, Upload, ImageIcon, Plus, Check } from 'lucide-react'
-import { apiClient } from '@/utils/api'
+import { X, Upload, ImageIcon, Plus, Check, Sparkles } from 'lucide-react'
+import { apiClient, getImageUrl } from '@/utils/api'
+
+const DEFAULT_PORTFOLIO_CATEGORIES = ['Development', 'Design', 'Marketing', 'Productivity', 'Others']
 
 export default function PortfolioModal({
     isOpen,
@@ -14,9 +16,13 @@ export default function PortfolioModal({
     categoriesList = [],
     onCategoryAdded
 }) {
+    const availableCategories = (categoriesList && categoriesList.length > 0)
+        ? categoriesList
+        : DEFAULT_PORTFOLIO_CATEGORIES
+
     const [title, setTitle] = useState('')
     const [description, setDescription] = useState('')
-    const [category, setCategory] = useState(defaultCategory || 'Development')
+    const [category, setCategory] = useState(defaultCategory || availableCategories[0] || 'Development')
     const [buttonLink, setButtonLink] = useState('')
     
     // Dynamic category addition states
@@ -43,7 +49,7 @@ export default function PortfolioModal({
         if (record) {
             setTitle(record.title || '')
             setDescription(record.description || '')
-            setCategory(record.category || 'Development')
+            setCategory(record.category || availableCategories[0] || 'Development')
             setButtonLink(record.button_link || '')
             setExistingImageUrl(record.image_url || '')
             setImageFile(null)
@@ -52,15 +58,13 @@ export default function PortfolioModal({
         } else {
             setTitle('')
             setDescription('')
-            setCategory(defaultCategory || (categoriesList[0] || 'Development'))
+            setCategory(defaultCategory || availableCategories[0] || 'Development')
             setButtonLink('')
             setExistingImageUrl('')
             setImageFile(null)
             setImagePreview(null)
             setImageAction('')
-            if (categoriesList.length === 0) {
-                setIsAddingNewCat(true)
-            }
+            setIsAddingNewCat(false)
         }
         setError('')
     }, [record, isOpen, defaultCategory, categoriesList])
@@ -171,6 +175,87 @@ export default function PortfolioModal({
         }
     }
 
+    // Fill fake data helper
+    const handleFillFakeData = async () => {
+        try {
+            const res = await apiClient.get('/testing/fake-data?type=portfolio').catch(() => null);
+            if (res && res.success && res.data) {
+                setTitle(res.data.title || '');
+                setDescription(res.data.description || '');
+                if (res.data.category) {
+                    setCategory(res.data.category);
+                    if (categoriesList.length > 0 && !categoriesList.includes(res.data.category) && onCategoryAdded) {
+                        onCategoryAdded(res.data.category);
+                    }
+                }
+                setButtonLink(res.data.button_link || '');
+                if (res.data.image_url) {
+                    setExistingImageUrl(res.data.image_url);
+                    setImageFile(null);
+                    setImagePreview(null);
+                    setImageAction('');
+                }
+                setError('');
+                return;
+            }
+        } catch (e) {}
+
+        const sampleCards = [
+            {
+                title: 'NextGen AI Analytics Platform',
+                description: 'Cloud-native analytics dashboard offering real-time streaming queries, interactive visual charts, and automated alerts.',
+                category: 'Development',
+                button_link: 'https://github.com/example/ai-analytics',
+                image_url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80'
+            },
+            {
+                title: 'Fintech Crypto Mobile Wallet',
+                description: 'Non-custodial crypto wallet interface featuring biometrics authentication, hardware keys support, and instant swaps.',
+                category: 'Development',
+                button_link: 'https://github.com/example/crypto-wallet',
+                image_url: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=800&q=80'
+            },
+            {
+                title: 'NeoBrutalism Design System UI Kit',
+                description: 'Award-winning design tokens, accessible components, and Figma UI kit tailored for modern SaaS startups.',
+                category: 'Design',
+                button_link: 'https://dribbble.com/example-neobrutalism',
+                image_url: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=800&q=80'
+            },
+            {
+                title: 'OmniChannel Marketing Growth Suite',
+                description: 'Campaign automation engine with multivariate A/B testing and AI copy generation.',
+                category: 'Marketing',
+                button_link: 'https://example.com/growth-suite',
+                image_url: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80'
+            },
+            {
+                title: 'ZenTask Agile Productivity Workspace',
+                description: 'Collaborative sprint management tool combining Kanban boards, Gantt charts, and calendar timelines.',
+                category: 'Productivity',
+                button_link: 'https://example.com/zentask',
+                image_url: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?auto=format&fit=crop&w=800&q=80'
+            },
+            {
+                title: 'Luxury Retail Brand Identity',
+                description: 'Comprehensive visual branding including packaging typography, spatial design, and social media templates.',
+                category: 'Design',
+                button_link: 'https://behance.net/example-luxury-brand',
+                image_url: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80'
+            }
+        ];
+        const item = sampleCards[Math.floor(Math.random() * sampleCards.length)];
+        setTitle(item.title);
+        setDescription(item.description);
+        setCategory(item.category);
+        setButtonLink(item.button_link);
+        setExistingImageUrl(item.image_url);
+        setImageFile(null);
+        setImagePreview(null);
+        setImageAction('');
+        setError('');
+    };
+
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={record ? 'Edit Portfolio Card' : 'Create Portfolio Card'}>
             <form onSubmit={handleSubmit} className="space-y-5 p-1">
@@ -182,9 +267,20 @@ export default function PortfolioModal({
 
                 {/* Title */}
                 <div>
-                    <label className="block text-xs font-bold uppercase text-muted-foreground mb-1.5">
-                        Title / Name <span className="text-red-500">*</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold uppercase text-muted-foreground">
+                            Title / Name <span className="text-red-500">*</span>
+                        </label>
+                        <button
+                            type="button"
+                            onClick={handleFillFakeData}
+                            className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-sm"
+                            title="Fill form with realistic demo portfolio data"
+                        >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>✨ Fill Fake Data</span>
+                        </button>
+                    </div>
                     <input
                         type="text"
                         value={title}
@@ -274,7 +370,7 @@ export default function PortfolioModal({
                                 onChange={(e) => setCategory(e.target.value)}
                                 className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm text-foreground focus:ring-2 focus:ring-primary/20 focus:border-primary transition outline-none cursor-pointer"
                             >
-                                {categoriesList.map(cat => (
+                                {availableCategories.map(cat => (
                                     <option key={cat} value={cat}>{cat}</option>
                                 ))}
                             </select>
@@ -319,7 +415,7 @@ export default function PortfolioModal({
                     {imagePreview || (existingImageUrl && imageAction !== 'remove') ? (
                         <div className="relative rounded-2xl overflow-hidden border border-border/80 aspect-video max-w-sm bg-muted/40 shadow-sm group">
                             <img
-                                src={imagePreview || `http://localhost:5001/${existingImageUrl}`}
+                                src={imagePreview || (existingImageUrl ? getImageUrl(existingImageUrl) : '')}
                                 alt="Preview"
                                 className="w-full h-full object-cover"
                             />

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from "next/navigation"
 import { Eye, Pencil, Trash2, Check, X, MoreVertical } from 'lucide-react'
 import Pagination from './Pagination'
+import { getImageUrl } from '@/utils/api'
 
 export default function DataTable({
     columns,
@@ -182,25 +183,16 @@ export default function DataTable({
         const isImgVal = typeof val === 'string' && (valStr.startsWith('/uploads/') || valStr.startsWith('uploads/') || valStr.startsWith('http://') || valStr.startsWith('https://') || valStr.startsWith('data:image/'))
 
         if ((isImgCol && valStr !== '') || isImgVal) {
-            let cleanPath = valStr
-            if (cleanPath.startsWith('uploads/')) cleanPath = '/' + cleanPath
-            const backendUrl = (cleanPath.startsWith('http') || cleanPath.startsWith('data:'))
-                ? cleanPath
-                : cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath
+            const imgUrl = getImageUrl(valStr)
 
             return (
                 <div className="flex items-center gap-2">
                     <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-border bg-secondary/40 shadow-xs flex-shrink-0">
                         <img
-                            src={backendUrl}
+                            src={imgUrl}
                             alt="Thumbnail"
                             className="w-full h-full object-cover"
                             onError={(e) => {
-                                if (!e.target.dataset.triedFallback && !cleanPath.startsWith('http') && !cleanPath.startsWith('data:')) {
-                                    e.target.dataset.triedFallback = 'true'
-                                    e.target.src = `http://localhost:5001${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`
-                                    return
-                                }
                                 e.target.onerror = null
                                 e.target.style.display = 'none'
                                 if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex'

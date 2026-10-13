@@ -97,6 +97,11 @@ const TABLE_SCHEMAS = {
       \`isDeleted\` tinyint(1) DEFAULT 0,
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    INSERT INTO \`categories\` (\`name\`, \`description\`, \`parent_id\`, \`image_url\`) VALUES
+      ('Electronics & Gadgets', 'Smartphones, laptops, smart accessories, and gaming hardware.', NULL, 'https://images.unsplash.com/photo-1498049860654-af1a5c566876?auto=format&fit=crop&w=600&q=80'),
+      ('Smartphones', 'Flagship Android and iOS mobile devices.', 1, 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=600&q=80'),
+      ('Modern Home & Living', 'Furniture, interior lighting, and kitchen appliances.', NULL, 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=600&q=80'),
+      ('Fashion & Apparel', 'Men and women curated seasonal collections.', NULL, 'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=600&q=80');
   `,
   contents: `
     CREATE TABLE IF NOT EXISTS \`contents\` (
@@ -277,7 +282,7 @@ const TABLE_SCHEMAS = {
       \`id\` int(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
       \`name\` varchar(100) NOT NULL,
       \`parent\` int(11) UNSIGNED DEFAULT NULL,
-      \`slug\` varchar(199) NOT NULL,
+      \`slug\` varchar(199) DEFAULT NULL,
       \`metaTitle\` text DEFAULT NULL,
       \`metaDescription\` text DEFAULT NULL,
       \`metaKeywords\` text DEFAULT NULL,
@@ -293,6 +298,10 @@ const TABLE_SCHEMAS = {
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ALTER TABLE \`product\` ADD UNIQUE KEY \`slug\` (\`slug\`) USING BTREE, ADD KEY \`subcategory_id\` (\`categoryLevel\`), ADD KEY \`category_id\` (\`categoryID\`);
+    INSERT INTO \`product\` (\`name\`, \`slug\`, \`price\`, \`photo\`, \`description\`, \`categoryID\`) VALUES
+      ('Noise-Canceling Wireless Headphones', 'noise-canceling-wireless-headphones', 249.99, 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80', 'Active noise cancellation with 40-hour battery life and studio audio quality.', 1),
+      ('Ergonomic Mesh Office Chair', 'ergonomic-mesh-office-chair', 189.50, 'https://images.unsplash.com/photo-1580481077111-6b45d2e293ca?auto=format&fit=crop&w=600&q=80', 'Breathable lumbar mesh support with 3D adjustable armrests.', 4),
+      ('Ultra-Slim Mechanical Keyboard', 'ultra-slim-mechanical-keyboard', 119.00, 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&q=80', 'Low profile hot-swappable switches with wireless Bluetooth connectivity.', 1);
   `,
   product_category: `
     CREATE TABLE IF NOT EXISTS \`product_category\` (
@@ -408,6 +417,60 @@ const TABLE_SCHEMAS = {
       \`deletedOn\` datetime DEFAULT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ALTER TABLE \`wishlist\` ADD KEY \`customer_id\` (\`customer_id\`), ADD KEY \`product_id\` (\`product_id\`);
+  `,
+  settings: `
+    CREATE TABLE IF NOT EXISTS \`settings\` (
+      \`id\` int(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+      \`setting_key\` varchar(191) NOT NULL,
+      \`setting_value\` text NOT NULL,
+      \`description\` text DEFAULT NULL,
+      \`createdBy\` varchar(255) DEFAULT NULL,
+      \`createdOn\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`modifiedOn\` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
+      \`deletedOn\` datetime DEFAULT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ALTER TABLE \`settings\` ADD UNIQUE KEY \`uniq_setting_key\` (\`setting_key\`);
+    INSERT INTO \`settings\` (\`setting_key\`, \`setting_value\`, \`description\`) VALUES 
+      ('site_name', 'Hertzcode Admin', 'The global website/application name displayed in header'),
+      ('site_email', 'admin@hertzcode.com', 'Primary notification and contact email address'),
+      ('support_phone', '+1 (555) 019-2834', 'Customer support helpline number'),
+      ('currency', 'USD', 'Default currency used across store products and invoices'),
+      ('maintenance_mode', 'false', 'Enable or disable public maintenance mode');
+  `,
+  portfolio_categories: `
+    CREATE TABLE IF NOT EXISTS \`portfolio_categories\` (
+      \`id\` int(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+      \`name\` varchar(255) NOT NULL UNIQUE,
+      \`image_url\` varchar(500) DEFAULT NULL,
+      \`created_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    INSERT INTO \`portfolio_categories\` (\`name\`, \`image_url\`) VALUES
+      ('Development', 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?auto=format&fit=crop&w=600&q=80'),
+      ('Design', 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=600&q=80'),
+      ('Marketing', 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80'),
+      ('Productivity', 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?auto=format&fit=crop&w=600&q=80');
+  `,
+  portfolio_cards: `
+    CREATE TABLE IF NOT EXISTS \`portfolio_cards\` (
+      \`id\` int(11) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+      \`title\` varchar(255) NOT NULL,
+      \`description\` text DEFAULT NULL,
+      \`category\` varchar(255) DEFAULT 'Development',
+      \`button_link\` varchar(500) DEFAULT NULL,
+      \`image_url\` varchar(500) DEFAULT NULL,
+      \`switch_active\` tinyint(1) DEFAULT 1,
+      \`isDeleted\` tinyint(1) DEFAULT 0,
+      \`deletedOn\` datetime DEFAULT NULL,
+      \`created_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    INSERT INTO \`portfolio_cards\` (\`title\`, \`description\`, \`category\`, \`button_link\`, \`image_url\`, \`switch_active\`) VALUES
+      ('NextGen AI Analytics Platform', 'Cloud-native analytics dashboard offering real-time streaming queries, interactive visual charts, and automated alerts.', 'Development', 'https://github.com/example/ai-analytics', 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80', 1),
+      ('Fintech Crypto Mobile Wallet', 'Non-custodial crypto wallet interface featuring biometrics authentication, hardware keys support, and instant swaps.', 'Development', 'https://github.com/example/crypto-wallet', 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=800&q=80', 1),
+      ('NeoBrutalism Design System UI Kit', 'Award-winning design tokens, accessible components, and Figma UI kit tailored for modern SaaS startups.', 'Design', 'https://dribbble.com/example-neobrutalism', 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=800&q=80', 1),
+      ('OmniChannel Marketing Growth Suite', 'Campaign automation engine with multivariate A/B testing and AI copy generation.', 'Marketing', 'https://example.com/growth-suite', 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80', 1),
+      ('ZenTask Agile Productivity Workspace', 'Collaborative sprint management tool combining Kanban boards, Gantt charts, and calendar timelines.', 'Productivity', 'https://example.com/zentask', 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?auto=format&fit=crop&w=800&q=80', 1),
+      ('Luxury Retail Brand Identity', 'Comprehensive visual branding including packaging typography, spatial design, and social media templates.', 'Design', 'https://behance.net/example-luxury-brand', 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80', 1);
   `
 };
 

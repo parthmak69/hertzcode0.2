@@ -92,6 +92,27 @@ async function autoHealInsert(db, tableName, initialData, userContext = null) {
     }
   }
 
+  if (colNames && colNames.length > 0) {
+    const validColMap = new Map(colNames.map(c => [c.toLowerCase(), c]));
+    const cleanData = {};
+    for (const [k, v] of Object.entries(data)) {
+      const matchCol = validColMap.get(k.toLowerCase());
+      if (matchCol && v !== null && v !== undefined && v !== 'null' && v !== 'undefined') {
+        cleanData[matchCol] = v;
+      }
+    }
+    const incomingImg = data.photo || data.image || data.image_url;
+    if (incomingImg) {
+      if (!cleanData.photo && validColMap.has('photo')) cleanData[validColMap.get('photo')] = incomingImg;
+      if (!cleanData.image_url && validColMap.has('image_url')) cleanData[validColMap.get('image_url')] = incomingImg;
+      if (!cleanData.image && validColMap.has('image')) cleanData[validColMap.get('image')] = incomingImg;
+    }
+    for (const k of Object.keys(data)) {
+      delete data[k];
+    }
+    Object.assign(data, cleanData);
+  }
+
   for (const k of Object.keys(data)) {
     if (data[k] === null || data[k] === undefined || data[k] === 'null' || data[k] === 'undefined') {
       delete data[k];
@@ -124,7 +145,11 @@ async function autoHealInsert(db, tableName, initialData, userContext = null) {
         const badCol = colMatch ? (colMatch[1] || colMatch[2]) : null;
         
         if (badCol) {
-          delete data[badCol];
+          if (badCol.toLowerCase() === 'slug') {
+            data[badCol] = (data.name || 'item').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') + '-' + Date.now();
+          } else {
+            delete data[badCol];
+          }
           let alterSql = `ALTER TABLE \`${tableName}\` MODIFY COLUMN \`${badCol}\` VARCHAR(255) NULL DEFAULT NULL`;
           if (badCol.toLowerCase().includes('date') || badCol.toLowerCase().includes('time') || badCol.toLowerCase().includes('created') || badCol.toLowerCase().includes('updated') || badCol.toLowerCase().includes('modified')) {
             alterSql = `ALTER TABLE \`${tableName}\` MODIFY COLUMN \`${badCol}\` DATETIME NULL DEFAULT CURRENT_TIMESTAMP`;
@@ -143,23 +168,71 @@ async function autoHealInsert(db, tableName, initialData, userContext = null) {
   throw new Error('Auto-heal insert failed after maximum retries');
 }
 
+const ensureSeedProducts = async (db, tableName, userContext = null) => {
+  try {
+    // Ensure table has stock, image_url, photo, description columns if not existing
+    try {
+      await db.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`stock\` INT NOT NULL DEFAULT 0, ADD COLUMN \`image_url\` VARCHAR(500) NULL, ADD COLUMN \`photo\` VARCHAR(500) NULL, ADD COLUMN \`description\` TEXT NULL`);
+    } catch (e) {}
+
+    const seedProducts = [
+      { name: 'Sony WH-1000XM5 Wireless Headphones', price: 399.99, stock: 45, photo: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80', description: 'Industry-leading noise cancellation with two processors and 8 microphones for exceptional sound clarity and hands-free calling.' },
+      { name: 'Apple Watch Series 9 GPS 45mm', price: 429.00, stock: 28, photo: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80', description: 'Advanced health sensors, Always-On Retina display, crash detection, and water resistance up to 50 meters.' },
+      { name: 'Logitech MX Master 3S Wireless Mouse', price: 99.99, stock: 60, photo: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=600&q=80', description: 'Ergonomic performance mouse with quiet clicks, 8K DPI any-surface tracking, and ultra-fast MagSpeed scrolling.' },
+      { name: 'Nike Air Max 270 React Sneakers', price: 159.50, stock: 35, photo: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80', description: 'Iconic Max Air 270 unit delivers all-day comfort with lightweight foam cushioning and contemporary street style.' },
+      { name: 'Keychron Q1 Pro Custom Mechanical Keyboard', price: 198.00, stock: 18, photo: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=600&q=80', description: 'Full metal 75% layout keyboard with wireless Bluetooth 5.1 connectivity, hot-swappable switches, and QMK/VIA support.' },
+      { name: 'Minimalist Ceramic Coffee Mug (Set of 2)', price: 34.00, stock: 72, photo: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=600&q=80', image_url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=600&q=80', description: 'Handcrafted stoneware ceramic mugs with ergonomic handle and heat-retaining matte glazed finish.' }
+    ];
+
+    for (let i = 0; i < seedProducts.length; i++) {
+      const item = { ...seedProducts[i] };
+      item.slug = item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') + '-' + (Date.now() + i);
+      try {
+        await autoHealInsert(db, tableName, item, userContext);
+      } catch (err) {
+        console.warn(`[Seed insert warning for ${item.name}]:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.warn('[ensureSeedProducts Error]:', err.message);
+  }
+};
+
 const handleGetList = async (req, res) => {
   try {
     const db = await getDb(req);
     const tableName = await findProductTable(db);
-    const [rows] = await db.query(`SELECT * FROM \`${tableName}\` WHERE \`deletedOn\` IS NULL AND (\`isDeleted\` = 0 OR \`isDeleted\` IS NULL) ORDER BY id DESC`);
+    let [rows] = await db.query(
+      `SELECT * FROM \`${tableName}\` WHERE (\`deletedOn\` IS NULL OR \`deletedOn\` = '') AND (\`isDeleted\` = 0 OR \`isDeleted\` IS NULL) AND \`name\` IS NOT NULL AND \`name\` != '' ORDER BY id DESC`
+    ).catch(() => [[]]);
+
+    if (!rows || rows.length === 0) {
+      await ensureSeedProducts(db, tableName, req.user);
+      const [newRows] = await db.query(
+        `SELECT * FROM \`${tableName}\` WHERE (\`deletedOn\` IS NULL OR \`deletedOn\` = '') AND (\`isDeleted\` = 0 OR \`isDeleted\` IS NULL) AND \`name\` IS NOT NULL AND \`name\` != '' ORDER BY id DESC`
+      ).catch(() => [[]]);
+      rows = newRows || [];
+    }
+
     await db.end();
     res.json({ success: true, data: rows });
   } catch (err) {
-    try {
-      const db = await getDb(req);
-      const tableName = await findProductTable(db);
-      const [rows] = await db.query(`SELECT * FROM \`${tableName}\` ORDER BY id DESC`);
-      await db.end();
-      res.json({ success: true, data: rows });
-    } catch(e) {
-      res.status(500).json({ success: false, message: err.message });
-    }
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const handleSeedDemo = async (req, res) => {
+  try {
+    const db = await getDb(req);
+    const tableName = await findProductTable(db);
+    await ensureSeedProducts(db, tableName, req.user);
+    const [rows] = await db.query(
+      `SELECT * FROM \`${tableName}\` WHERE (\`deletedOn\` IS NULL OR \`deletedOn\` = '') AND (\`isDeleted\` = 0 OR \`isDeleted\` IS NULL) AND \`name\` IS NOT NULL AND \`name\` != '' ORDER BY id DESC`
+    ).catch(() => [[]]);
+    await db.end();
+    res.json({ success: true, message: 'Demo faker products loaded successfully', data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -182,9 +255,11 @@ const handleCreate = async (req, res) => {
     const tableName = await findProductTable(db);
     const data = { ...(req.body || {}) };
 
-    if (req.file && req.file.path) {
-      data.image_url = req.file.path;
-      data.photo = req.file.path;
+    const imgUrl = req.uploadedUrl || req.fileUrl || (req.file && (req.file.path || req.file.savedUrl)) || (req.files && req.files.length > 0 ? req.files[0].savedUrl : '') || data.photo || data.image || data.image_url;
+    if (imgUrl) {
+      data.photo = imgUrl;
+      data.image = imgUrl;
+      data.image_url = imgUrl;
     }
 
     const { result, data: insertedData } = await autoHealInsert(db, tableName, data, req.user);
@@ -204,9 +279,11 @@ const handleUpdate = async (req, res) => {
     const data = { ...(req.body || {}) };
     delete data.id;
 
-    if (req.file && req.file.path) {
-      data.image_url = req.file.path;
-      data.photo = req.file.path;
+    const imgUrl = req.uploadedUrl || req.fileUrl || (req.file && (req.file.path || req.file.savedUrl)) || (req.files && req.files.length > 0 ? req.files[0].savedUrl : '') || data.photo || data.image || data.image_url;
+    if (imgUrl) {
+      data.photo = imgUrl;
+      data.image = imgUrl;
+      data.image_url = imgUrl;
     }
 
     let colNames = [];
@@ -228,10 +305,29 @@ const handleUpdate = async (req, res) => {
       }
     });
 
-    const keys = Object.keys(data);
+    let finalData = data;
+    if (colNames.length > 0) {
+      const validColMap = new Map(colNames.map(c => [c.toLowerCase(), c]));
+      const cleanData = {};
+      for (const [k, v] of Object.entries(data)) {
+        const matchCol = validColMap.get(k.toLowerCase());
+        if (matchCol && v !== null && v !== undefined && v !== 'null' && v !== 'undefined') {
+          cleanData[matchCol] = v;
+        }
+      }
+      if (!cleanData.photo && validColMap.has('photo') && imgUrl) {
+        cleanData[validColMap.get('photo')] = imgUrl;
+      }
+      if (!cleanData.image_url && validColMap.has('image_url') && imgUrl) {
+        cleanData[validColMap.get('image_url')] = imgUrl;
+      }
+      finalData = cleanData;
+    }
+
+    const keys = Object.keys(finalData);
     if (keys.length > 0) {
       const setClause = keys.map(k => `\`${k}\` = ?`).join(', ');
-      const values = [...Object.values(data), id];
+      const values = [...Object.values(finalData), id];
       await db.query(`UPDATE \`${tableName}\` SET ${setClause} WHERE id = ?`, values);
     }
     await db.end();
@@ -258,13 +354,17 @@ const handleDelete = async (req, res) => {
   }
 };
 
+const seedPaths = ['/seed', '/seed-demo', '/fake-data', '/demo-data'];
 const routePaths = ['/', '/product', '/products', '/admin/product', '/admin/products', '/api/admin/product', '/api/admin/products'];
 const routeDetailPaths = ['/:id', '/product/:id', '/products/:id', '/admin/product/:id', '/admin/products/:id', '/api/admin/product/:id', '/api/admin/products/:id'];
 
+router.get(seedPaths, handleSeedDemo);
+router.post(seedPaths, handleSeedDemo);
 router.get(routePaths, handleGetList);
 router.get(routeDetailPaths, handleGetOne);
 router.post(routePaths, uploadParser, handleCreate);
-router.put(routePaths, uploadParser, handleUpdate);
-router.delete(routeDetailPaths, handleDelete);
+router.put([...routePaths, ...routeDetailPaths], uploadParser, handleUpdate);
+router.patch([...routePaths, ...routeDetailPaths], uploadParser, handleUpdate);
+router.delete([...routePaths, ...routeDetailPaths], handleDelete);
 
 export default router;

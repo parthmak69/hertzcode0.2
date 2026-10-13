@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Input, FormSection } from '@/components/ui/FormFields'
 import { Upload, X, Shield } from 'lucide-react'
+import { getImageUrl } from '@/utils/api'
 
 const emptyAdmin = {
     fullName: '',
@@ -38,10 +39,7 @@ export default function AdminsForm({ admin, onSubmit, onCancel }) {
             })
 
             if (existingImage) {
-                const src = existingImage.startsWith('http') || existingImage.startsWith('data:')
-                    ? existingImage
-                    : `http://localhost:5001${existingImage.startsWith('/') ? '' : '/'}${existingImage}`
-                setPreviewUrl(src)
+                setPreviewUrl(getImageUrl(existingImage))
             } else {
                 setPreviewUrl('')
             }
@@ -58,8 +56,8 @@ export default function AdminsForm({ admin, onSubmit, onCancel }) {
         setFormData(prev => ({ ...prev, [name]: value }))
 
         if (name === 'profile_image') {
-            if (value && (value.startsWith('http') || value.startsWith('/uploads/'))) {
-                setPreviewUrl(value.startsWith('http') ? value : `http://localhost:5001${value.startsWith('/') ? '' : '/'}${value}`)
+            if (value && (value.startsWith('http') || value.startsWith('/uploads/') || value.startsWith('uploads/'))) {
+                setPreviewUrl(getImageUrl(value))
             } else {
                 setPreviewUrl(value)
             }

@@ -483,8 +483,16 @@ export default function MasterForm({ record, onSubmit, onCancel }) {
             return acc
         }, {})
 
+        const titleValue = (formData.text_title || formData.title || '').trim()
+        const passwordValue = (formData.password || formData.password_hash || '').trim()
+
         const payload = {
             ...formData,
+            title: titleValue,
+            text_title: titleValue,
+            name: titleValue,
+            password: passwordValue,
+            password_hash: passwordValue,
             date_picker: sqlDate,
             datetime_picker: sqlDatetime,
             json_metadata: packedMetadata,
@@ -498,8 +506,9 @@ export default function MasterForm({ record, onSubmit, onCancel }) {
         }
 
         // Clean password if blank on edit
-        if (record && !payload.password) {
+        if (record && !passwordValue) {
             delete payload.password
+            delete payload.password_hash
         }
 
         onSubmit(payload)
