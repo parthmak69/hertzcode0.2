@@ -6,11 +6,44 @@ import axios from "axios";
 import Link from "next/link";
 import { useToast } from "../context/ToastContext";
 import { useAuth } from "../context/AuthContext";
-import Sidebar from "../../components/layout/Sidebar";
+
+const DatabaseIcon = ({ active }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: active ? "#ffffff" : "currentColor" }}>
+    <ellipse cx="12" cy="5" rx="9" ry="3" />
+    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+    <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
+  </svg>
+);
+
+const CrudIcon = ({ active }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: active ? "#ffffff" : "currentColor" }}>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="16" y1="13" x2="8" y2="13" />
+    <line x1="16" y1="17" x2="8" y2="17" />
+    <polyline points="10 9 9 9 8 9" />
+  </svg>
+);
+
+const AdminIcon = ({ active }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: active ? "#ffffff" : "currentColor" }}>
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+);
+
+const AiIcon = ({ active }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: active ? "#ffffff" : "currentColor" }}>
+    <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+    <path d="M5 3v4M3 5h4M19 17v4M17 19h4" />
+  </svg>
+);
+
 export default function DashboardLayout({ children }) {
   const { showToast } = useToast();
   const { currentUser, currentUserRole, currentUserName, authorized, signOut } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [logoSrc, setLogoSrc] = useState("/logo.png");
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -95,8 +128,9 @@ export default function DashboardLayout({ children }) {
       }
     };
   }, []);
-  const isDbActive = pathname === "/dashboard" || pathname.startsWith("/dashboard/db");
-  const isCrudActive = pathname.startsWith("/dashboard/crud");
+  const isDbActive = (pathname === "/dashboard" || pathname.startsWith("/dashboard/db")) && !pathname.startsWith("/dashboard/crud") && !pathname.startsWith("/dashboard/admin") && !pathname.startsWith("/dashboard/ai-builder");
+  const isCrudActive = pathname.startsWith("/dashboard/crud") && !pathname.startsWith("/dashboard/admin");
+  const isAiActive = pathname.startsWith("/dashboard/ai-builder");
   const isRecycleActive = pathname === "/dashboard/recycle-bin";
   const isAdminActive = pathname.startsWith("/dashboard/admin");
   const isPortal = pathname?.includes("/admin-portal");
@@ -127,40 +161,48 @@ export default function DashboardLayout({ children }) {
     boxShadow: "0 4px 20px rgba(14, 165, 233, 0.08)"
   }}>
         {
-    /* Toggle Button & Logo */
+    /* Logo & Horizontal Navigation Bar */
   }
-        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-          {
-    /* Hamburger 3-line Menu Button */
-  }
-          <button
-    onClick={() => setSidebarOpen(!sidebarOpen)}
-    style={{
-      background: "none",
-      border: "none",
-      cursor: "pointer",
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "space-between",
-      width: "22px",
-      height: "16px",
-      padding: 0,
-      outline: "none",
-      color: "var(--text-primary)"
-    }}
-    title="Toggle Menu"
-  >
-            <span style={{ width: "100%", height: "2.5px", backgroundColor: "currentColor", borderRadius: "2px", transition: "all 0.2s", transform: sidebarOpen ? "rotate(45deg) translate(5px, 5px)" : "none" }} />
-            <span style={{ width: "100%", height: "2.5px", backgroundColor: "currentColor", borderRadius: "2px", transition: "all 0.2s", opacity: sidebarOpen ? 0 : 1 }} />
-            <span style={{ width: "100%", height: "2.5px", backgroundColor: "currentColor", borderRadius: "2px", transition: "all 0.2s", transform: sidebarOpen ? "rotate(-45deg) translate(5px, -5px)" : "none" }} />
-          </button>
-
-          {
-    /* Logo */
-  }
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "28px" }}>
+          <Link href="/dashboard" style={{ display: "flex", alignItems: "center", textDecoration: "none" }}>
             <img src={logoSrc} alt="Hertzcoder Logo" style={{ height: "44px", objectFit: "contain" }} />
-          </div>
+          </Link>
+
+          <nav style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Link
+              href="/dashboard"
+              className={`navbar-link ${isDbActive ? "active" : ""}`}
+            >
+              <DatabaseIcon active={isDbActive} />
+              <span>Database Builder</span>
+            </Link>
+
+            <Link
+              href="/dashboard/crud"
+              className={`navbar-link ${isCrudActive ? "active" : ""}`}
+            >
+              <CrudIcon active={isCrudActive} />
+              <span>CRUD Builder</span>
+            </Link>
+
+            <Link
+              href="/dashboard/ai-builder"
+              className={`navbar-link ${isAiActive ? "active" : ""}`}
+            >
+              <AiIcon active={isAiActive} />
+              <span>AI Builder</span>
+            </Link>
+
+            {currentUserRole === "admin" && (
+              <Link
+                href="/dashboard/admin"
+                className={`navbar-link ${isAdminActive ? "active" : ""}`}
+              >
+                <AdminIcon active={isAdminActive} />
+                <span>Admin Panel</span>
+              </Link>
+            )}
+          </nav>
         </div>
 
         {
@@ -285,9 +327,6 @@ export default function DashboardLayout({ children }) {
     /* ==================== MAIN WORKSPACE ==================== */
   }
       <div style={{ display: "flex", flex: 1, overflow: "hidden", width: "100%", height: "calc(100vh - 75px)" }}>
-        
-        <Sidebar sidebarOpen={sidebarOpen} currentUserRole={currentUserRole} />
-
         {
     /* ==================== CONTENT INNER PORTAL ==================== */
   }

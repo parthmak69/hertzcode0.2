@@ -4,7 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { getProjectsForUser, saveProjectsForUser } from "../../../utils/projectStorage";
 import { databaseService } from "../../../../services/databaseService";
+import { crudService } from "../../../../services/crudService";
+import { useToast } from "../../../context/ToastContext";
 export default function CrudFilesListPage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const params = useParams();
   const projectId = params?.projectId;
@@ -13,6 +16,24 @@ export default function CrudFilesListPage() {
   const [currentUser, setCurrentUser] = useState("");
   const [userRole, setUserRole] = useState("user");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [updatingFileId, setUpdatingFileId] = useState(null);
+
+  const handleQuickUpdateModule = async (file) => {
+    if (!project || !file) return;
+    setUpdatingFileId(file.id);
+    try {
+      const res = await crudService.generateCrud(project, file);
+      if (res && res.success === false) {
+        showToast(`Failed to update module "${file.name}": ` + (res.error || res.message || "Server error"), "error");
+      } else {
+        showToast(`Module "${file.name}" updated successfully!`, "success");
+      }
+    } catch (err) {
+      showToast(`Failed to update module "${file.name}": ` + err.message, "error");
+    } finally {
+      setUpdatingFileId(null);
+    }
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [fileName, setFileName] = useState("");
   const [tableName, setTableName] = useState("");
@@ -408,21 +429,9 @@ export default function CrudFilesListPage() {
             <h2 style={{ fontSize: "20px", fontWeight: "bold", color: "var(--text-primary)" }}>Files in project &quot;{project.name}&quot;:</h2>
             <div style={{ display: "flex", gap: "10px" }}>
               <button
-    onClick={() => window.open(`/dashboard/crud/${projectId}/admin-portal/login`, "_blank")}
-    style={{ backgroundColor: "#10b981", color: "white", border: "none", padding: "8px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
-  >
-                View Admin Panel
-              </button>
-              <button
-    onClick={() => router.push(`/dashboard/crud/${projectId}/builder`)}
-    style={{ backgroundColor: "var(--bg-tertiary)", border: "1px solid var(--border-color)", color: "var(--text-primary)", padding: "8px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
-  >
-                Launch Advanced UI Builder
-              </button>
-              <button
-    onClick={() => setIsModalOpen(true)}
-    style={{ backgroundColor: "#3b82f6", color: "white", border: "none", padding: "8px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
-  >
+                onClick={() => setIsModalOpen(true)}
+                style={{ backgroundColor: "#3b82f6", color: "white", border: "none", padding: "8px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
+              >
                 Add CRUD File
               </button>
             </div>
@@ -478,7 +487,7 @@ export default function CrudFilesListPage() {
                         </td>
                         <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>{file.createdAt}</td>
                         <td style={{ padding: "14px 16px" }}>
-                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                          <div style={{ display: "flex", gap: "10px", alignItems: "center", whiteSpace: "nowrap" }}>
                             <button
                               onClick={() => handleOpenEditModal(file)}
                               style={{ border: "none", background: "none", cursor: "pointer", padding: "6px", color: "#3b82f6", display: "inline-flex", alignItems: "center", gap: "4px", fontWeight: "600" }}
@@ -492,14 +501,50 @@ export default function CrudFilesListPage() {
                             </button>
                             <button
                               onClick={() => router.push(`/dashboard/crud/${projectId}/${file.id}`)}
-                              style={{ border: "none", background: "none", cursor: "pointer", padding: "6px", color: "#f59e0b", display: "inline-flex", alignItems: "center", gap: "4px" }}
-                              title="Configure UI Builder"
+                              style={{ border: "none", background: "none", cursor: "pointer", padding: "6px", color: "#f59e0b", display: "inline-flex", alignItems: "center", gap: "4px", fontWeight: "600" }}
+                              title="Manage Schema & Fields"
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                 <circle cx="12" cy="12" r="3" />
                                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                               </svg>
-                              Customize UI
+                              Manage Schema
+                            </button>
+                            <button
+                              onClick={() => handleQuickUpdateModule(file)}
+                              disabled={updatingFileId === file.id}
+                              style={{
+                                border: "none",
+                                background: updatingFileId === file.id ? "rgba(16, 185, 129, 0.15)" : "none",
+                                cursor: updatingFileId === file.id ? "not-allowed" : "pointer",
+                                padding: "6px 8px",
+                                borderRadius: "6px",
+                                color: "#10b981",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                fontWeight: "600",
+                                transition: "all 0.2s ease"
+                              }}
+                              title="Quick Update / Regenerate module code without entering settings"
+                            >
+                              {updatingFileId === file.id ? (
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: "spin 1s linear infinite" }}>
+                                  <line x1="12" y1="2" x2="12" y2="6" />
+                                  <line x1="12" y1="18" x2="12" y2="22" />
+                                  <line x1="4.93" y1="4.93" x2="7.76" y2="7.76" />
+                                  <line x1="16.24" y1="16.24" x2="19.07" y2="19.07" />
+                                  <line x1="2" y1="12" x2="6" y2="12" />
+                                  <line x1="18" y1="12" x2="22" y2="12" />
+                                  <line x1="4.93" y1="19.07" x2="7.76" y2="16.24" />
+                                  <line x1="16.24" y1="7.76" x2="19.07" y2="4.93" />
+                                </svg>
+                              ) : (
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                                </svg>
+                              )}
+                              {updatingFileId === file.id ? "Updating..." : "Update"}
                             </button>
                             <button
                               onClick={() => confirmDeleteFile(file.id, file.name)}

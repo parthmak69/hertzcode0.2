@@ -1,5 +1,5 @@
 "use strict";
-import React, { useState } from "react";
+import React from "react";
 
 export default function SchemaCard({
   col,
@@ -12,7 +12,6 @@ export default function SchemaCard({
   getPlaceholderForCol,
 }) {
   const isMongoDb = project.databaseName.toLowerCase().includes("mongodb:");
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   return (
     <div
@@ -52,7 +51,7 @@ export default function SchemaCard({
 
       {/* Form fields */}
       <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
-        {/* Row 1 */}
+        {/* Row 1: Primary column configuration (Inline) */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px" }}>
           
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -95,48 +94,32 @@ export default function SchemaCard({
             />
           </div>
 
-          {showAdvanced && (
-            <>
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-muted)" }}>Class:</label>
-                <input
-                  type="text"
-                  value={col.className !== undefined ? col.className : "col-sm-12 col-md-6 col-lg-6 col-xl-6"}
-                  onChange={(e) => handleUpdateColumnDetail(col.id, { className: e.target.value })}
-                  style={{ padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", outline: "none", fontSize: "13.5px" }}
-                />
-              </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-muted)" }}>Class:</label>
+            <input
+              type="text"
+              value={col.className !== undefined ? col.className : "col-sm-12 col-md-6 col-lg-6 col-xl-6"}
+              onChange={(e) => handleUpdateColumnDetail(col.id, { className: e.target.value })}
+              style={{ padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", outline: "none", fontSize: "13.5px" }}
+            />
+          </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-muted)" }}>Pattern (RegEx):</label>
-                <div style={{ display: "flex", gap: "4px" }}>
-                  <input
-                    type="text"
-                    value={col.pattern || ""}
-                    onChange={(e) => handleUpdateColumnDetail(col.id, { pattern: e.target.value })}
-                    placeholder={col.type === "email" ? "^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$" : "no pattern"}
-                    style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", outline: "none", fontSize: "13.5px" }}
-                  />
-                  <button type="button" style={{ border: "1px solid var(--border-color)", backgroundColor: "var(--bg-tertiary)", color: "var(--text-primary)", width: "32px", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "help" }} title="Helper tooltip info">i</button>
-                </div>
-              </div>
-            </>
-          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-muted)" }}>Pattern (RegEx):</label>
+            <div style={{ display: "flex", gap: "4px" }}>
+              <input
+                type="text"
+                value={col.pattern || ""}
+                onChange={(e) => handleUpdateColumnDetail(col.id, { pattern: e.target.value })}
+                placeholder={col.type === "email" ? "^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$" : "no pattern"}
+                style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", outline: "none", fontSize: "13.5px" }}
+              />
+              <button type="button" style={{ border: "1px solid var(--border-color)", backgroundColor: "var(--bg-tertiary)", color: "var(--text-primary)", width: "32px", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "help" }} title="Helper tooltip info">i</button>
+            </div>
+          </div>
         </div>
 
-        {/* Advanced Settings Toggle Button */}
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-8px" }}>
-          <button 
-            type="button" 
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            style={{ background: "none", border: "none", color: "#3b82f6", fontSize: "12.5px", fontWeight: "bold", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
-          >
-            {showAdvanced ? "Hide Advanced Settings ▲" : "Show Advanced Settings ▼"}
-          </button>
-        </div>
-
-        {/* Row 2 (Advanced Settings) */}
-        {showAdvanced && (
+        {/* Row 2: Advanced Details (Inline) */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-muted)" }}>Maxlength (Chars):</label>
@@ -171,7 +154,6 @@ export default function SchemaCard({
             />
           </div>
         </div>
-        )}
 
         {/* Dropdown settings if type is select */}
         {col.type === "select" && (

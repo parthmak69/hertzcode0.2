@@ -42,7 +42,7 @@ export const databaseService = {
   seedTable: async (dbName, tableName, count, mappings = {}, customValues = {}) => {
     return api.post("/api/database/tables/seed", { dbName, tableName, count, mappings, customValues });
   },
-  generateSqlWithAi: async (prompt, dbName = "") => {
-    return api.post("/api/ai", { prompt, dbName });
+  generateSqlWithAi: async (prompt, dbName = "", schemaContext = "") => {
+    return api.post("/api/ai", { prompt, dbName, schemaContext });
   },
 };
