@@ -674,9 +674,12 @@ router.delete(['/', '/:id'], async (req, res) => {
       return res.json({ success: true, affectedRows: result.affectedRows });
     } catch (e) {
       try {
-        await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60isDeleted\\x60 TINYINT(1) DEFAULT 0, ADD COLUMN \\x60deletedOn\\x60 DATETIME NULL DEFAULT NULL");
+        await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60isDeleted\\x60 TINYINT(1) DEFAULT 0").catch(() => {});
+        await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60deletedOn\\x60 DATETIME NULL DEFAULT NULL").catch(() => {});
         const query = "UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1, \\x60deletedOn\\x60 = CURRENT_TIMESTAMP WHERE \\x60" + '${pkField}' + "\\x60 = ?";
-        const [result] = await pool.execute(query, [id]);
+        const [result] = await pool.execute(query, [id]).catch(async () => {
+          return await pool.execute("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1 WHERE \\x60" + '${pkField}' + "\\x60 = ?", [id]);
+        });
         return res.json({ success: true, affectedRows: result.affectedRows });
       } catch(alterErr) {
         return res.status(500).json({ success: false, error: alterErr.message });
@@ -767,6 +770,9 @@ async function ensureTable() {
     for (const stmt of stmts) {
       await pool.query(stmt);
     }
+    // Proactively guarantee soft-delete columns exist
+    await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60isDeleted\\x60 TINYINT(1) DEFAULT 0").catch(() => {});
+    await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60deletedOn\\x60 DATETIME NULL DEFAULT NULL").catch(() => {});
   } catch(e) {
     console.error('[ensureTable Warning]:', e.message);
   }
@@ -792,10 +798,36 @@ export async function getRecords(req, res) {
 
     const hasSoftDelete = ${file.columns.some(c => c.name === 'isDeleted' || c.name === 'deletedOn') || file.settings?.recycleBin === true ? 'true' : 'false'};
     if (hasSoftDelete) {
-      if (showDeleted) {
-        whereConditions.push("(" + tblPrefix + "\\x60isDeleted\\x60 = 1 OR " + tblPrefix + "\\x60deletedOn\\x60 IS NOT NULL)");
-      } else {
-        whereConditions.push("(" + tblPrefix + "\\x60deletedOn\\x60 IS NULL AND (" + tblPrefix + "\\x60isDeleted\\x60 = 0 OR " + tblPrefix + "\\x60isDeleted\\x60 IS NULL))");
+      // Dynamic column check to never query columns that don't exist in the table
+      let hasIsDeletedCol = false;
+      let hasDeletedOnCol = false;
+      try {
+        const [tableCols] = await pool.query("SHOW COLUMNS FROM \\x60" + '${file.tableName}' + "\\x60");
+        const colSet = new Set((tableCols || []).map(c => (c.Field || '').toLowerCase()));
+        hasIsDeletedCol = colSet.has('isdeleted') || colSet.has('is_deleted');
+        hasDeletedOnCol = colSet.has('deletedon') || colSet.has('deleted_at');
+      } catch (colErr) {
+        hasIsDeletedCol = true;
+      }
+
+      if (hasIsDeletedCol && hasDeletedOnCol) {
+        if (showDeleted) {
+          whereConditions.push("(" + tblPrefix + "\\x60isDeleted\\x60 = 1 OR " + tblPrefix + "\\x60deletedOn\\x60 IS NOT NULL)");
+        } else {
+          whereConditions.push("(" + tblPrefix + "\\x60deletedOn\\x60 IS NULL AND (" + tblPrefix + "\\x60isDeleted\\x60 = 0 OR " + tblPrefix + "\\x60isDeleted\\x60 IS NULL))");
+        }
+      } else if (hasIsDeletedCol) {
+        if (showDeleted) {
+          whereConditions.push(tblPrefix + "\\x60isDeleted\\x60 = 1");
+        } else {
+          whereConditions.push("(" + tblPrefix + "\\x60isDeleted\\x60 = 0 OR " + tblPrefix + "\\x60isDeleted\\x60 IS NULL)");
+        }
+      } else if (hasDeletedOnCol) {
+        if (showDeleted) {
+          whereConditions.push(tblPrefix + "\\x60deletedOn\\x60 IS NOT NULL");
+        } else {
+          whereConditions.push(tblPrefix + "\\x60deletedOn\\x60 IS NULL");
+        }
       }
     }
 
@@ -1199,9 +1231,12 @@ export async function deleteRecord(req, res) {
         return res.json({ success: true, message: 'Record moved to trash', affectedRows: result.affectedRows });
       } catch (e) {
         try {
-          await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60isDeleted\\x60 TINYINT(1) DEFAULT 0, ADD COLUMN \\x60deletedOn\\x60 DATETIME NULL DEFAULT NULL");
+          await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60isDeleted\\x60 TINYINT(1) DEFAULT 0").catch(() => {});
+          await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60deletedOn\\x60 DATETIME NULL DEFAULT NULL").catch(() => {});
           const query = "UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1, \\x60deletedOn\\x60 = CURRENT_TIMESTAMP WHERE \\x60" + '${pkField}' + "\\x60 = ?";
-          const [result] = await pool.execute(query, [id]);
+          const [result] = await pool.execute(query, [id]).catch(async () => {
+            return await pool.execute("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1 WHERE \\x60" + '${pkField}' + "\\x60 = ?", [id]);
+          });
           return res.json({ success: true, message: 'Record moved to trash', affectedRows: result.affectedRows });
         } catch (fallbackErr) {
           const query = "DELETE FROM \\x60" + '${file.tableName}' + "\\x60 WHERE \\x60" + '${pkField}' + "\\x60 = ?";
@@ -1234,8 +1269,11 @@ export async function bulkDeleteRecords(req, res) {
         const [result] = await pool.query("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1, \\x60deletedOn\\x60 = CURRENT_TIMESTAMP WHERE \\x60" + '${pkField}' + "\\x60 IN (" + placeholders + ")", ids);
         return res.json({ success: true, message: 'Records moved to trash', affectedRows: result.affectedRows });
       } catch (e) {
-        await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60isDeleted\\x60 TINYINT(1) DEFAULT 0, ADD COLUMN \\x60deletedOn\\x60 DATETIME NULL DEFAULT NULL").catch(() => {});
-        const [result] = await pool.query("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1, \\x60deletedOn\\x60 = CURRENT_TIMESTAMP WHERE \\x60" + '${pkField}' + "\\x60 IN (" + placeholders + ")", ids);
+        await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60isDeleted\\x60 TINYINT(1) DEFAULT 0").catch(() => {});
+        await pool.query("ALTER TABLE \\x60" + '${file.tableName}' + "\\x60 ADD COLUMN \\x60deletedOn\\x60 DATETIME NULL DEFAULT NULL").catch(() => {});
+        const [result] = await pool.query("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1, \\x60deletedOn\\x60 = CURRENT_TIMESTAMP WHERE \\x60" + '${pkField}' + "\\x60 IN (" + placeholders + ")", ids).catch(async () => {
+          return await pool.query("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 1 WHERE \\x60" + '${pkField}' + "\\x60 IN (" + placeholders + ")", ids);
+        });
         return res.json({ success: true, message: 'Records moved to trash', affectedRows: result.affectedRows });
       }
     }
@@ -1249,7 +1287,11 @@ export async function patchRecordStatus(req, res) {
   try {
     const id = req.params?.id || req.body?.id;
     if (req.body?.action === 'restore') {
-      await pool.query("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 0, \\x60deletedOn\\x60 = NULL WHERE \\x60" + '${pkField}' + "\\x60 = ?", [id]);
+      try {
+        await pool.query("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 0, \\x60deletedOn\\x60 = NULL WHERE \\x60" + '${pkField}' + "\\x60 = ?", [id]);
+      } catch (restoreErr) {
+        await pool.query("UPDATE \\x60" + '${file.tableName}' + "\\x60 SET \\x60isDeleted\\x60 = 0 WHERE \\x60" + '${pkField}' + "\\x60 = ?", [id]).catch(() => {});
+      }
       return res.json({ success: true, message: 'Record restored successfully.' });
     }
 

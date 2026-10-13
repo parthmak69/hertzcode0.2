@@ -170,9 +170,13 @@ async function autoHealInsert(db, tableName, initialData, userContext = null) {
 
 const ensureSeedProducts = async (db, tableName, userContext = null) => {
   try {
-    // Ensure table has stock, image_url, photo, description columns if not existing
     try {
-      await db.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`stock\` INT NOT NULL DEFAULT 0, ADD COLUMN \`image_url\` VARCHAR(500) NULL, ADD COLUMN \`photo\` VARCHAR(500) NULL, ADD COLUMN \`description\` TEXT NULL`);
+      await db.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`stock\` INT NOT NULL DEFAULT 0`).catch(() => {});
+      await db.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`image_url\` VARCHAR(500) NULL`).catch(() => {});
+      await db.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`photo\` VARCHAR(500) NULL`).catch(() => {});
+      await db.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`description\` TEXT NULL`).catch(() => {});
+      await db.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`isDeleted\` TINYINT(1) DEFAULT 0`).catch(() => {});
+      await db.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`deletedOn\` DATETIME NULL`).catch(() => {});
     } catch (e) {}
 
     const seedProducts = [
@@ -202,14 +206,22 @@ const handleGetList = async (req, res) => {
   try {
     const db = await getDb(req);
     const tableName = await findProductTable(db);
+    
+    let hasDeletedOn = false;
+    try {
+      const [cols] = await db.query(`SHOW COLUMNS FROM \`${tableName}\``);
+      hasDeletedOn = (cols || []).some(c => (c.Field || '').toLowerCase() === 'deletedon');
+    } catch(e) {}
+    const softDelClause = hasDeletedOn ? "(`deletedOn` IS NULL OR `deletedOn` = '') AND " : "";
+
     let [rows] = await db.query(
-      `SELECT * FROM \`${tableName}\` WHERE (\`deletedOn\` IS NULL OR \`deletedOn\` = '') AND (\`isDeleted\` = 0 OR \`isDeleted\` IS NULL) AND \`name\` IS NOT NULL AND \`name\` != '' ORDER BY id DESC`
+      `SELECT * FROM \`${tableName}\` WHERE ${softDelClause}(\`isDeleted\` = 0 OR \`isDeleted\` IS NULL) AND \`name\` IS NOT NULL AND \`name\` != '' ORDER BY id DESC`
     ).catch(() => [[]]);
 
     if (!rows || rows.length === 0) {
       await ensureSeedProducts(db, tableName, req.user);
       const [newRows] = await db.query(
-        `SELECT * FROM \`${tableName}\` WHERE (\`deletedOn\` IS NULL OR \`deletedOn\` = '') AND (\`isDeleted\` = 0 OR \`isDeleted\` IS NULL) AND \`name\` IS NOT NULL AND \`name\` != '' ORDER BY id DESC`
+        `SELECT * FROM \`${tableName}\` WHERE ${softDelClause}(\`isDeleted\` = 0 OR \`isDeleted\` IS NULL) AND \`name\` IS NOT NULL AND \`name\` != '' ORDER BY id DESC`
       ).catch(() => [[]]);
       rows = newRows || [];
     }
@@ -226,8 +238,16 @@ const handleSeedDemo = async (req, res) => {
     const db = await getDb(req);
     const tableName = await findProductTable(db);
     await ensureSeedProducts(db, tableName, req.user);
+
+    let hasDeletedOn = false;
+    try {
+      const [cols] = await db.query(`SHOW COLUMNS FROM \`${tableName}\``);
+      hasDeletedOn = (cols || []).some(c => (c.Field || '').toLowerCase() === 'deletedon');
+    } catch(e) {}
+    const softDelClause = hasDeletedOn ? "(`deletedOn` IS NULL OR `deletedOn` = '') AND " : "";
+
     const [rows] = await db.query(
-      `SELECT * FROM \`${tableName}\` WHERE (\`deletedOn\` IS NULL OR \`deletedOn\` = '') AND (\`isDeleted\` = 0 OR \`isDeleted\` IS NULL) AND \`name\` IS NOT NULL AND \`name\` != '' ORDER BY id DESC`
+      `SELECT * FROM \`${tableName}\` WHERE ${softDelClause}(\`isDeleted\` = 0 OR \`isDeleted\` IS NULL) AND \`name\` IS NOT NULL AND \`name\` != '' ORDER BY id DESC`
     ).catch(() => [[]]);
     await db.end();
     res.json({ success: true, message: 'Demo faker products loaded successfully', data: rows });

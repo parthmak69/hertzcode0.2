@@ -75,14 +75,18 @@ const ensureSeedCategories = async (db, tableName, userContext = null) => {
   try {
     // Ensure table has all necessary columns
     try {
-      await db.query(`ALTER TABLE \`${tableName}\` 
-        ADD COLUMN \`description\` TEXT NULL,
-        ADD COLUMN \`parent_id\` INT NULL,
-        ADD COLUMN \`image_url\` VARCHAR(500) NULL,
-        ADD COLUMN \`photo\` VARCHAR(500) NULL,
-        ADD COLUMN \`slug\` VARCHAR(255) NULL,
-        ADD COLUMN \`isDeleted\` TINYINT(1) DEFAULT 0,
-        ADD COLUMN \`deletedOn\` DATETIME NULL`);
+      const colDefs = [
+        'ADD COLUMN `description` TEXT NULL',
+        'ADD COLUMN `parent_id` INT NULL',
+        'ADD COLUMN `image_url` VARCHAR(500) NULL',
+        'ADD COLUMN `photo` VARCHAR(500) NULL',
+        'ADD COLUMN `slug` VARCHAR(255) NULL',
+        'ADD COLUMN `isDeleted` TINYINT(1) DEFAULT 0',
+        'ADD COLUMN `deletedOn` DATETIME NULL'
+      ];
+      for (const cd of colDefs) {
+        await db.query(`ALTER TABLE \`${tableName}\` ${cd}`).catch(() => {});
+      }
     } catch (e) {}
 
     const seedCategories = [
@@ -218,14 +222,21 @@ const handleGetList = async (req, res) => {
     const db = await getDb(req);
     const tableName = await findCategoryTable(db);
     
+    let hasDeletedOn = false;
+    try {
+      const [cols] = await db.query(`SHOW COLUMNS FROM \`${tableName}\``);
+      hasDeletedOn = (cols || []).some(c => (c.Field || '').toLowerCase() === 'deletedon');
+    } catch(e) {}
+    const softDelClause = hasDeletedOn ? "(`deletedOn` IS NULL OR `deletedOn` = '') AND " : "";
+
     let [rows] = await db.query(
-      `SELECT * FROM \`${tableName}\` WHERE (\`deletedOn\` IS NULL OR \`deletedOn\` = '') AND (\`isDeleted\` = 0 OR \`isDeleted\` IS NULL) AND \`name\` IS NOT NULL AND \`name\` != '' ORDER BY id ASC`
+      `SELECT * FROM \`${tableName}\` WHERE ${softDelClause}(\`isDeleted\` = 0 OR \`isDeleted\` IS NULL) AND \`name\` IS NOT NULL AND \`name\` != '' ORDER BY id ASC`
     ).catch(() => [[]]);
 
     if (!rows || rows.length === 0) {
       await ensureSeedCategories(db, tableName, req.user);
       const [newRows] = await db.query(
-        `SELECT * FROM \`${tableName}\` WHERE (\`deletedOn\` IS NULL OR \`deletedOn\` = '') AND (\`isDeleted\` = 0 OR \`isDeleted\` IS NULL) AND \`name\` IS NOT NULL AND \`name\` != '' ORDER BY id ASC`
+        `SELECT * FROM \`${tableName}\` WHERE ${softDelClause}(\`isDeleted\` = 0 OR \`isDeleted\` IS NULL) AND \`name\` IS NOT NULL AND \`name\` != '' ORDER BY id ASC`
       ).catch(() => [[]]);
       rows = newRows || [];
     }

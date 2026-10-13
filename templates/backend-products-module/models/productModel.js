@@ -20,9 +20,18 @@ export const ensureProductsTable = async (executingUserId) => {
     `, [], executingUserId, 'Create products table if not exists');
 
     // Auto-ensure columns exist if table was created previously without them
-    try {
-      await dbQuery('ALTER TABLE `products` ADD COLUMN `image_url` VARCHAR(500) DEFAULT NULL, ADD COLUMN `photo` VARCHAR(500) DEFAULT NULL, ADD COLUMN `description` TEXT DEFAULT NULL, ADD COLUMN `isDeleted` TINYINT(1) DEFAULT 0, ADD COLUMN `deletedOn` DATETIME DEFAULT NULL', [], executingUserId, 'Auto add columns');
-    } catch(e) {}
+    const colsToEnsure = [
+      'ADD COLUMN `image_url` VARCHAR(500) DEFAULT NULL',
+      'ADD COLUMN `photo` VARCHAR(500) DEFAULT NULL',
+      'ADD COLUMN `description` TEXT DEFAULT NULL',
+      'ADD COLUMN `isDeleted` TINYINT(1) DEFAULT 0',
+      'ADD COLUMN `deletedOn` DATETIME DEFAULT NULL',
+      'ADD COLUMN `is_deleted` TINYINT(1) DEFAULT 0',
+      'ADD COLUMN `deleted_at` DATETIME DEFAULT NULL'
+    ];
+    for (const cDef of colsToEnsure) {
+      await dbQuery(`ALTER TABLE \`products\` ${cDef}`, [], executingUserId, 'Auto add column').catch(() => {});
+    }
 
     // Seed realistic faker products if table is empty
     const countRes = await dbQuery('SELECT COUNT(*) as count FROM `products`', [], executingUserId, 'Check products count').catch(() => []);
@@ -53,7 +62,20 @@ export const ensureProductsTable = async (executingUserId) => {
 
 export const getAllProducts = async (executingUserId) => {
   await ensureProductsTable(executingUserId);
-  const sql = 'SELECT * FROM `products` WHERE (`deleted_at` IS NULL OR `deleted_at` = "") AND (`deletedOn` IS NULL OR `deletedOn` = "") AND (`is_deleted` = 0 OR `is_deleted` IS NULL) AND (`isDeleted` = 0 OR `isDeleted` IS NULL) AND `name` IS NOT NULL AND `name` != "" ORDER BY `id` DESC';
+  let hasDeletedOn = false;
+  let hasDeletedAt = false;
+  try {
+    const cols = await dbQuery('SHOW COLUMNS FROM `products`', [], executingUserId).catch(() => []);
+    const colSet = new Set((cols || []).map(c => (c.Field || '').toLowerCase()));
+    hasDeletedOn = colSet.has('deletedon');
+    hasDeletedAt = colSet.has('deleted_at');
+  } catch (e) {}
+
+  const deleteClauses = ['(`isDeleted` = 0 OR `isDeleted` IS NULL)'];
+  if (hasDeletedOn) deleteClauses.push('(`deletedOn` IS NULL OR `deletedOn` = "")');
+  if (hasDeletedAt) deleteClauses.push('(`deleted_at` IS NULL OR `deleted_at` = "")');
+
+  const sql = `SELECT * FROM \`products\` WHERE ${deleteClauses.join(' AND ')} AND \`name\` IS NOT NULL AND \`name\` != "" ORDER BY \`id\` DESC`;
   let rows = await dbQuery(sql, [], executingUserId, 'Fetch all products').catch(() => []);
   if (!rows || rows.length === 0) {
     const seedProducts = [

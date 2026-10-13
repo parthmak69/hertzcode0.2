@@ -34,7 +34,8 @@ CREATE TABLE `admins` (
   `email` varchar(190) NOT NULL,
   `createdOn` timestamp NOT NULL DEFAULT current_timestamp(),
   `modifiedOn` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `isDeleted` tinyint(1) NOT NULL DEFAULT 0
+  `isDeleted` tinyint(1) NOT NULL DEFAULT 0,
+  `deletedOn` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
@@ -77,6 +78,8 @@ CREATE TABLE `master_form_inputs` (
   `multi_select_tags` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`multi_select_tags`)),
   `json_metadata` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`json_metadata`)),
   `repeater_data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`repeater_data`)),
+  `isDeleted` tinyint(1) NOT NULL DEFAULT 0,
+  `deletedOn` datetime DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

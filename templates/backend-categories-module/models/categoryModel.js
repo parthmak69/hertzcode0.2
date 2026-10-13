@@ -21,9 +21,18 @@ export const ensureCategoriesTable = async (executingUserId) => {
     `, [], executingUserId, 'Create categories table if not exists');
 
     // Auto-ensure columns exist if table was created previously without them
-    try {
-      await dbQuery('ALTER TABLE `categories` ADD COLUMN `image_url` VARCHAR(500) DEFAULT NULL, ADD COLUMN `photo` VARCHAR(500) DEFAULT NULL, ADD COLUMN `slug` VARCHAR(255) DEFAULT NULL, ADD COLUMN `description` TEXT DEFAULT NULL, ADD COLUMN `parent_id` INT DEFAULT NULL, ADD COLUMN `isDeleted` TINYINT(1) DEFAULT 0, ADD COLUMN `deletedOn` DATETIME DEFAULT NULL', [], executingUserId, 'Auto add columns');
-    } catch(e) {}
+    const colsToEnsure = [
+      'ADD COLUMN `image_url` VARCHAR(500) DEFAULT NULL',
+      'ADD COLUMN `photo` VARCHAR(500) DEFAULT NULL',
+      'ADD COLUMN `slug` VARCHAR(255) DEFAULT NULL',
+      'ADD COLUMN `description` TEXT DEFAULT NULL',
+      'ADD COLUMN `parent_id` INT DEFAULT NULL',
+      'ADD COLUMN `isDeleted` TINYINT(1) DEFAULT 0',
+      'ADD COLUMN `deletedOn` DATETIME DEFAULT NULL'
+    ];
+    for (const cDef of colsToEnsure) {
+      await dbQuery(`ALTER TABLE \`categories\` ${cDef}`, [], executingUserId, 'Auto add column').catch(() => {});
+    }
 
     // Seed realistic faker categories if table is empty
     const countRes = await dbQuery('SELECT COUNT(*) as count FROM `categories`', [], executingUserId, 'Check categories count').catch(() => []);
@@ -51,7 +60,17 @@ export const ensureCategoriesTable = async (executingUserId) => {
 
 export const getAllCategories = async (executingUserId) => {
   await ensureCategoriesTable(executingUserId);
-  const sql = 'SELECT * FROM `categories` WHERE (`deletedOn` IS NULL OR `deletedOn` = "") AND (`isDeleted` = 0 OR `isDeleted` IS NULL) AND `name` IS NOT NULL AND `name` != "" ORDER BY `id` ASC';
+  let hasDeletedOn = false;
+  try {
+    const cols = await dbQuery('SHOW COLUMNS FROM `categories`', [], executingUserId).catch(() => []);
+    hasDeletedOn = (cols || []).some(c => (c.Field || '').toLowerCase() === 'deletedon');
+  } catch (e) {}
+
+  const deleteFilter = hasDeletedOn
+    ? '(`deletedOn` IS NULL OR `deletedOn` = "") AND (`isDeleted` = 0 OR `isDeleted` IS NULL)'
+    : '(`isDeleted` = 0 OR `isDeleted` IS NULL)';
+
+  const sql = `SELECT * FROM \`categories\` WHERE ${deleteFilter} AND \`name\` IS NOT NULL AND \`name\` != "" ORDER BY \`id\` ASC`;
   let rows = await dbQuery(sql, [], executingUserId, 'Fetch all categories').catch(() => []);
   if (!rows || rows.length === 0) {
     const seedCategories = [

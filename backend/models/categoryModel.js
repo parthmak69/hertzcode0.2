@@ -17,6 +17,10 @@ export const ensureCategoriesTable = async (executingUserId) => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `, [], executingUserId, 'Create categories table if not exists');
 
+    // Auto-ensure soft delete columns exist
+    await dbQuery('ALTER TABLE `categories` ADD COLUMN `isDeleted` TINYINT(1) DEFAULT 0', [], executingUserId).catch(() => {});
+    await dbQuery('ALTER TABLE `categories` ADD COLUMN `deletedOn` DATETIME DEFAULT NULL', [], executingUserId).catch(() => {});
+
     // Seed initial categories if table is empty
     const checkRows = await dbQuery('SELECT COUNT(*) as cnt FROM `categories`', [], executingUserId, 'Check categories count');
     const count = checkRows[0]?.cnt || checkRows[0]?.['COUNT(*)'] || 0;
