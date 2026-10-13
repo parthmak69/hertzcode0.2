@@ -246,21 +246,15 @@ export default function TablesListPage() {
             <h2 style={{ fontSize: "20px", fontWeight: "bold", color: "var(--text-primary)" }}>Tables in {dbName}:</h2>
             <div style={{ display: "flex", gap: "10px" }}>
               <button
-    onClick={() => setIsQueryModalOpen(true)}
-    style={{ backgroundColor: "#ef4444", color: "white", border: "none", padding: "8px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
-  >
+                onClick={() => setIsQueryModalOpen(true)}
+                style={{ backgroundColor: "#ef4444", color: "white", border: "none", padding: "8px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
+              >
                 {dbName.startsWith("mongodb:") ? "Mongo Shell" : "SQL Query Editor"}
               </button>
               <button
-    onClick={() => setIsAiModalOpen(true)}
-    style={{ backgroundColor: "#10b981", color: "white", border: "none", padding: "8px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
-  >
-                AI Builder
-              </button>
-              <button
-    onClick={() => setIsTableModalOpen(true)}
-    style={{ backgroundColor: "#3b82f6", color: "white", border: "none", padding: "8px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
-  >
+                onClick={() => setIsTableModalOpen(true)}
+                style={{ backgroundColor: "#3b82f6", color: "white", border: "none", padding: "8px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
+              >
                 {dbName.startsWith("mongodb:") ? "Add Collection" : "Add Table"}
               </button>
             </div>
