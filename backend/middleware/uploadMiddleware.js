@@ -3,11 +3,64 @@ import fs from 'fs/promises'
 import path from 'path'
 import { getStorageStatus } from '../utils/storageHelper.js'
 
-const upload = multer({ storage: multer.memoryStorage() })
+// Strict Whitelist of Safe Extensions & Forbidden Extensions
+const ALLOWED_EXTENSIONS = new Set([
+    '.jpg', '.jpeg', '.png', '.webp', '.gif', '.ico',
+    '.pdf', '.csv', '.txt', '.doc', '.docx', '.xls', '.xlsx', '.zip'
+]);
+
+const FORBIDDEN_EXTENSIONS = new Set([
+    '.html', '.htm', '.svg', '.xhtml', '.js', '.mjs', '.php', '.exe',
+    '.sh', '.bat', '.cmd', '.vbs', '.py', '.jsp', '.asp', '.aspx', '.cgi'
+]);
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB per file
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: MAX_FILE_SIZE,
+        files: 10
+    },
+    fileFilter: (req, file, cb) => {
+        const ext = path.extname(file.originalname || '').toLowerCase();
+
+        // 1. Block dangerous script/executable extensions (Stored XSS / Remote Execution prevention)
+        if (FORBIDDEN_EXTENSIONS.has(ext)) {
+            return cb(new Error(`Security Alert: Uploading '${ext}' files is strictly prohibited.`));
+        }
+
+        // 2. Enforce allowed extension whitelist
+        if (!ALLOWED_EXTENSIONS.has(ext)) {
+            return cb(new Error(`File format '${ext}' is not supported. Allowed: images (JPG, PNG, WebP, GIF), PDFs, CSV, and Office documents.`));
+        }
+
+        cb(null, true);
+    }
+});
+
+// Wrapper to catch multer limit / validation errors cleanly
+const multerUpload = (req, res, next) => {
+    upload.any()(req, res, (err) => {
+        if (err) {
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(400).json({
+                    success: false,
+                    message: `File exceeds maximum allowed size of ${(MAX_FILE_SIZE / (1024 * 1024))}MB.`
+                });
+            }
+            return res.status(400).json({
+                success: false,
+                message: err.message || 'File upload validation error.'
+            });
+        }
+        next();
+    });
+};
 
 // Custom middleware to handle uploads and parsing of forms
 const uploadParser = [
-    upload.any(),
+    multerUpload,
     async (req, res, next) => {
         // Parse JSON strings in request body
         if (req.body) {

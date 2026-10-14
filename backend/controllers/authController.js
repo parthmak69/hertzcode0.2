@@ -1,4 +1,5 @@
 import mysql from "mysql2/promise";
+import { generateToken, verifyToken, verifyPassword, hashPassword, needsRehash } from "../utils/authHelper.js";
 
 // Helper to get raw database credentials from env
 const getDbConfig = () => ({
@@ -77,10 +78,10 @@ export const login = async (req, res) => {
     // If table is empty, insert default admin user
     const [userRows] = await connection.query("SELECT COUNT(*) as count FROM user_cred");
     if (userRows[0].count === 0) {
-      // Default: admin / admin123
+      // Default: admin / admin123 (stored using salted scrypt)
       await connection.execute(
         "INSERT INTO user_cred (username, pass_hash, name, role) VALUES (?, ?, ?, ?)",
-        ["admin", "admin123", "Administrator", "admin"]
+        ["admin", hashPassword("admin123"), "Administrator", "admin"]
       );
     } else {
       // Ensure 'admin' user is set to 'admin' role
@@ -101,13 +102,44 @@ export const login = async (req, res) => {
       return res.status(401).json({ success: false, error: "Invalid username or password" });
     }
 
-    await connection.end();
-
     const user = rows[0];
-    if (user.pass_hash === pass_hash) {
-      return res.json({ success: true, username, name: user.name || "", role: user.role || "user" });
+    if (verifyPassword(pass_hash, user.pass_hash)) {
+      // If user had legacy MD5 or plaintext password, transparently upgrade to modern salted scrypt
+      if (needsRehash(user.pass_hash)) {
+        try {
+          const modernHash = hashPassword(pass_hash);
+          await connection.execute("UPDATE user_cred SET pass_hash = ? WHERE id = ?", [modernHash, user.id]);
+        } catch (rehashErr) {
+          console.warn("[Auto-Rehash Warning] Failed to upgrade user password hash:", rehashErr.message);
+        }
+      }
+
+      await connection.end();
+
+      const tokenUser = {
+        id: user.id,
+        username: user.username,
+        name: user.name || user.username,
+        role: user.role || "admin",
+      };
+      const accessToken = generateToken(tokenUser);
+
+      return res.json({
+        success: true,
+        message: "Login successful",
+        username: user.username,
+        name: user.name || "",
+        role: user.role || "admin",
+        token: accessToken,
+        data: {
+          accessToken,
+          refreshToken: accessToken,
+          user: tokenUser,
+        },
+      });
     }
 
+    await connection.end();
     return res.status(401).json({ success: false, error: "Invalid username or password" });
   } catch (err) {
     if (connection) {
@@ -245,7 +277,7 @@ export const createUser = async (req, res) => {
 
     await connection.execute(
       "INSERT INTO user_cred (username, pass_hash, name, role) VALUES (?, ?, ?, ?)",
-      [username, pass_hash, name || username.split("@")[0], role || "user"]
+      [username, hashPassword(pass_hash), name || username.split("@")[0], role || "user"]
     );
     await connection.end();
     return res.json({ success: true });
@@ -374,10 +406,10 @@ export const updateUser = async (req, res) => {
     }
 
     if (password) {
-      // If password is provided, update password too
+      // If password is provided, securely hash password with salted scrypt
       await connection.execute(
         "UPDATE user_cred SET username = ?, pass_hash = ?, name = ?, role = ? WHERE id = ?",
-        [newUsername, password, newName, newRole, id]
+        [newUsername, hashPassword(password), newName, newRole, id]
       );
     } else {
       // If no password provided, update without changing password
@@ -395,5 +427,35 @@ export const updateUser = async (req, res) => {
     }
     console.error("Update User Error:", err);
     return res.status(500).json({ success: false, error: "Database error: " + err.message });
+  }
+};
+
+export const refreshToken = async (req, res) => {
+  try {
+    const adminUser = verifyToken(req);
+    if (!adminUser) {
+      return res.status(401).json({ success: false, message: "Invalid or expired token." });
+    }
+
+    const tokenUser = {
+      id: adminUser.id,
+      name: adminUser.name,
+      username: adminUser.username,
+      role: adminUser.role || "admin",
+    };
+    const newToken = generateToken(tokenUser);
+
+    return res.json({
+      success: true,
+      token: newToken,
+      data: {
+        accessToken: newToken,
+        refreshToken: newToken,
+        user: tokenUser,
+      },
+    });
+  } catch (err) {
+    console.error("[Refresh Token API Error]", err);
+    return res.status(500).json({ success: false, message: "Internal server error." });
   }
 };

@@ -4,8 +4,7 @@ const require = createRequire(import.meta.url);
 import mysql from 'mysql2/promise';
 
 import uploadParser from '../middleware/uploadMiddleware.js';
-
-const checkAuth = (req, res, next) => next();
+import checkAuth from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 router.use(checkAuth);

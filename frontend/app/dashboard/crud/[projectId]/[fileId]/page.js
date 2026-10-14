@@ -143,17 +143,6 @@ export default function CrudUiConfigPage() {
     handleUpdateColumnDetail(colId, { [key]: value });
   };
 
-  const handleUpdateGlobalSetting = (key, value) =>{
-       if (!file) return 
-        const updateFile = {
-          ...file,
-          settings: {
-            ...file.settings,
-            [key]: value
-          }
-        }
-        saveFileChanges(updateFile);
-  };
 
   const generateOutputCode = () => {
     if (!file) return "";
@@ -363,37 +352,6 @@ ${file.columns.filter((c) => c.isListCol !== false).map((c) => `            <td 
         </h2>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "24px", maxWidth: "1200px", margin: "0 auto" }}>
-          {/* GLOBAL SETTINGS CARD */}
-          <div
-            style={{
-              backgroundColor: "var(--bg-secondary)",
-              border: "1px solid var(--border-color)",
-              borderRadius: "10px",
-              padding: "20px",
-              boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.05)",
-              marginBottom: "10px"
-            }}
-          >
-            <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "bold", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "8px" }}>
-              <i className="fa-solid fa-gears" style={{ color: "#3b82f6" }}></i> Global Code Generation Settings
-            </h3>
-            
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxWidth: "450px" }}>
-              <label style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)" }}>API / UI Target:</label>
-              <select
-                value={file.settings.apiTarget || "admin"}
-                onChange={(e) => handleUpdateGlobalSetting("apiTarget", e.target.value)}
-                style={{ padding: "10px 12px", border: "1px solid var(--border-color)", borderRadius: "6px", backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", outline: "none", fontSize: "14px" }}
-              >
-                <option value="admin">Admin Panel Only (admin-panel & apiAdmin)</option>
-                <option value="customer">Customer Website Only (website & apiCustomer)</option>
-                <option value="both">Both Projects (Shared API & UI)</option>
-              </select>
-              <span style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
-                Specifies where the generated UI components and API backend routes will be saved inside your root project folder.
-              </span>
-            </div>
-          </div>
 
           {/* PREMIUM FEATURES CARD */}
           <div

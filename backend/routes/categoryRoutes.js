@@ -1,8 +1,10 @@
 import express from 'express';
 import mysql from 'mysql2/promise';
 import uploadParser from '../middleware/uploadMiddleware.js';
+import checkAuth from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+router.use(checkAuth);
 
 const getDb = async (req) => {
   const targetDb = req?.query?.dbName || req?.headers?.['x-db-name'] || req?.headers?.['db-name'] || req?.body?.dbName;

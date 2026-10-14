@@ -63,10 +63,10 @@ function getLookupDetails(col) {
 }
 
 // Generate React frontend component template
-function generateReactComponent(file, apiTarget = "admin") {
+function generateReactComponent(file) {
   const pkField = getPrimaryKeyColumn(file);
-  const apiEndpoint = apiTarget === "customer" ? `/api/apiCustomer/${file.name}` : `/api/apiAdmin/${file.name}`;
-  const lookupEndpointPrefix = apiTarget === "customer" ? "/api/apiCustomer" : "/api/apiAdmin";
+  const apiEndpoint = `/api/apiAdmin/${file.name}`;
+  const lookupEndpointPrefix = "/api/apiAdmin";
   const pascalName = toPascalCase(file.name);
   const componentName = pascalName + "Manager";
 
@@ -1481,13 +1481,13 @@ function generateRouterCode(file, apiTarget = "admin") {
   const hyphenPlural = pluralName.replace(/_/g, '-');
   const underscorePlural = pluralName.replace(/-/g, '_');
 
-  const isCategoryModule = file.premiumType === 'categories' || file.name.toLowerCase().includes('cat') || file.name.toLowerCase().includes('ctae') || file.name.toLowerCase().includes('ctag');
-  const extraCategoryBase = isCategoryModule ? ['/categories', '/category', '/admin/categories', '/admin/category', '/api/admin/categories', '/api/admin/category'] : [];
-  const extraCategoryId = isCategoryModule ? ['/categories/:id', '/category/:id', '/admin/categories/:id', '/admin/category/:id', '/api/admin/categories/:id', '/api/admin/category/:id'] : [];
+  const prefix = apiTarget === 'customer' ? 'customer' : 'admin';
+  const extraCategoryBase = isCategoryModule ? ['/categories', '/category', `/${prefix}/categories`, `/${prefix}/category`, `/api/${prefix}/categories`, `/api/${prefix}/category`] : [];
+  const extraCategoryId = isCategoryModule ? ['/categories/:id', '/category/:id', `/${prefix}/categories/:id`, `/${prefix}/category/:id`, `/api/${prefix}/categories/:id`, `/api/${prefix}/category/:id`] : [];
 
   const isSettingsModule = file.premiumType === 'settings' || file.premiumType === 'setting' || file.name.toLowerCase().includes('setting');
-  const extraSettingsBase = isSettingsModule ? ['/settings', '/setting', '/admin/settings', '/admin/setting', '/api/admin/settings', '/api/admin/setting'] : [];
-  const extraSettingsId = isSettingsModule ? ['/settings/:id', '/setting/:id', '/admin/settings/:id', '/admin/setting/:id', '/api/admin/settings/:id', '/api/admin/setting/:id'] : [];
+  const extraSettingsBase = isSettingsModule ? ['/settings', '/setting', `/${prefix}/settings`, `/${prefix}/setting`, `/api/${prefix}/settings`, `/api/${prefix}/setting`] : [];
+  const extraSettingsId = isSettingsModule ? ['/settings/:id', '/setting/:id', `/${prefix}/settings/:id`, `/${prefix}/setting/:id`, `/api/${prefix}/settings/:id`, `/api/${prefix}/setting/:id`] : [];
 
   const basePaths = JSON.stringify(Array.from(new Set([
     '/',
@@ -1498,17 +1498,17 @@ function generateRouterCode(file, apiTarget = "admin") {
     `/${pluralName}`,
     `/${hyphenPlural}`,
     `/${underscorePlural}`,
-    '/admin',
-    '/admins',
-    `/admin/${file.name}`,
-    `/admin/${hyphenName}`,
-    `/admin/${underscoreName}`,
-    `/admin/${singularName}`,
-    `/admin/${pluralName}`,
-    `/admin/${hyphenPlural}`,
-    `/admin/${underscorePlural}`,
-    `/api/admin/${file.name}`,
-    `/api/admin/${pluralName}`,
+    `/${prefix}`,
+    `/${prefix}s`,
+    `/${prefix}/${file.name}`,
+    `/${prefix}/${hyphenName}`,
+    `/${prefix}/${underscoreName}`,
+    `/${prefix}/${singularName}`,
+    `/${prefix}/${pluralName}`,
+    `/${prefix}/${hyphenPlural}`,
+    `/${prefix}/${underscorePlural}`,
+    `/api/${prefix}/${file.name}`,
+    `/api/${prefix}/${pluralName}`,
     ...extraCategoryBase,
     ...extraSettingsBase
   ])));
@@ -1522,15 +1522,15 @@ function generateRouterCode(file, apiTarget = "admin") {
     `/${pluralName}/:id`,
     `/${hyphenPlural}/:id`,
     `/${underscorePlural}/:id`,
-    `/admin/${file.name}/:id`,
-    `/admin/${hyphenName}/:id`,
-    `/admin/${underscoreName}/:id`,
-    `/admin/${singularName}/:id`,
-    `/admin/${pluralName}/:id`,
-    `/admin/${hyphenPlural}/:id`,
-    `/admin/${underscorePlural}/:id`,
-    `/api/admin/${file.name}/:id`,
-    `/api/admin/${pluralName}/:id`,
+    `/${prefix}/${file.name}/:id`,
+    `/${prefix}/${hyphenName}/:id`,
+    `/${prefix}/${underscoreName}/:id`,
+    `/${prefix}/${singularName}/:id`,
+    `/${prefix}/${pluralName}/:id`,
+    `/${prefix}/${hyphenPlural}/:id`,
+    `/${prefix}/${underscorePlural}/:id`,
+    `/api/${prefix}/${file.name}/:id`,
+    `/api/${prefix}/${pluralName}/:id`,
     ...extraCategoryId,
     ...extraSettingsId
   ])));
@@ -1810,8 +1810,22 @@ app.use((req, res, next) => {
     const boundary = boundaryMatch ? (boundaryMatch[1] || boundaryMatch[2]) : null;
 
     let chunks = [];
-    req.on('data', chunk => { chunks.push(chunk); });
+    let totalBytes = 0;
+    const MAX_UPLOAD_SIZE = 15 * 1024 * 1024; // 15MB upload stream limit
+    let limitExceeded = false;
+
+    req.on('data', chunk => {
+      totalBytes += chunk.length;
+      if (totalBytes > MAX_UPLOAD_SIZE) {
+        limitExceeded = true;
+        req.destroy(); // Abort upload to protect server memory
+        return;
+      }
+      chunks.push(chunk);
+    });
+
     req.on('end', () => {
+      if (limitExceeded) return;
       try {
         const buffer = Buffer.concat(chunks);
         const bodyObj = { ...(req.body || {}) };
@@ -1843,6 +1857,13 @@ app.use((req, res, next) => {
                 const fieldName = nameMatch[1];
                 if (filenameMatch && filenameMatch[1] && contentBuf.length > 0) {
                   const rawFilename = path.basename(filenameMatch[1]);
+                  const ext = path.extname(rawFilename).toLowerCase();
+                  const ALLOWED_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.ico', '.pdf', '.csv', '.txt', '.doc', '.docx', '.xls', '.xlsx', '.zip'];
+                  if (!ALLOWED_EXTS.includes(ext)) {
+                    console.warn(\`[Blocked Upload] Refused upload with unauthorized extension: \${ext}\`);
+                    continue;
+                  }
+
                   const uploadsDir = path.resolve('./public/uploads');
                   if (!fs.existsSync(uploadsDir)) {
                     fs.mkdirSync(uploadsDir, { recursive: true });
@@ -2084,7 +2105,7 @@ export async function loadMvcRoutes() {
             const router = imported.default || imported;
             if (!router) continue;
 
-            const apiPrefix = target === 'admin' ? 'apiAdmin' : 'apiCustomer';
+            const apiPrefix = target === 'admin' ? 'apiAdmin' : (target === 'customer' ? 'apiCustomer' : 'api');
             const singularName = tableName.endsWith('s') ? tableName.slice(0, -1) : tableName;
             const pluralName = tableName.endsWith('s') ? tableName : tableName + 's';
             const aliases = new Set([tableName, singularName, pluralName]);
@@ -2140,14 +2161,21 @@ export async function loadMvcRoutes() {
             }
 
             aliases.forEach(name => {
-              app.use('/api/' + apiPrefix + '/' + name, router);
-              app.use('/api/admin/' + name, router);
-              app.use('/admin/' + name, router);
-              if (name !== 'admin' && name !== 'customer') {
+              if (target === 'customer') {
+                app.use('/api/apiCustomer/' + name, router);
+                app.use('/api/customer/' + name, router);
+                app.use('/customer/' + name, router);
                 app.use('/api/' + name, router);
+              } else {
+                app.use('/api/apiAdmin/' + name, router);
+                app.use('/api/admin/' + name, router);
+                app.use('/admin/' + name, router);
+                if (name !== 'admin' && name !== 'customer') {
+                  app.use('/api/' + name, router);
+                }
               }
             });
-            console.log('[MVC ROUTE] Registered ' + file + ' (aliases: ' + Array.from(aliases).join(', ') + ')');
+            console.log('[MVC ROUTE] Registered ' + file + ' (' + target + ' aliases: ' + Array.from(aliases).join(', ') + ')');
           } catch (err) {
             console.error('[MVC ROUTE ERROR] Failed to load ' + file + ':', err.message);
           }
@@ -2455,7 +2483,6 @@ export const generateFiles = async (req, res) => {
     // Run boilerplate checks and initializations
     initializeBoilerplate(targetDir, project);
 
-    const apiTarget = file.settings?.apiTarget || "admin";
     const generatedPaths = {};
 
     // 1. Always write the JSON schema config to admin-panel/schemas so Hertzcoder can load it
@@ -2466,8 +2493,7 @@ export const generateFiles = async (req, res) => {
     generatedPaths.schema = schemaFilePath;
 
     // 2. Generate Admin UI and Admin Backend API (Express MVC style)
-    if (apiTarget === "admin" || apiTarget === "both") {
-      const adminComponentsDir = path.join(targetDir, "admin-panel", "components");
+    const adminComponentsDir = path.join(targetDir, "admin-panel", "components");
       const adminControllerDir = path.join(targetDir, "backend", "controllers", "admin");
       const adminRouteDir = path.join(targetDir, "backend", "routes", "admin");
       const modelsDir = path.join(targetDir, "backend", "models");
@@ -2555,47 +2581,34 @@ export default function ${pascalName}Layout({ children }) {
       fs.writeFileSync(controllerFilePath, controllerCode, "utf8");
       generatedPaths.controllerAdmin = controllerFilePath;
 
-      // Write Route (.js)
+      // Write Admin Route (.js)
       const routeCode = generateRouterCode(file, "admin");
       const routeFilePath = path.join(adminRouteDir, `${file.name}Routes.js`);
       fs.writeFileSync(routeFilePath, routeCode, "utf8");
       generatedPaths.routeAdmin = routeFilePath;
 
-      // Write SQL Model schema reference (.sql)
-      const sqlCode = generateSqlSchema(file);
-      const sqlFilePath = path.join(modelsDir, `${file.name}.sql`);
-      fs.writeFileSync(sqlFilePath, sqlCode, "utf8");
-      generatedPaths.modelSql = sqlFilePath;
-    }
-
-    // 3. Generate Customer/Website Backend API (Express MVC style, Only routes & controllers, no UI files)
-    if (apiTarget === "customer" || apiTarget === "both") {
+      // Write Customer Controller (.js) - Headless Customer Backend API
       const customerControllerDir = path.join(targetDir, "backend", "controllers", "customer");
       const customerRouteDir = path.join(targetDir, "backend", "routes", "customer");
-      const modelsDir = path.join(targetDir, "backend", "models");
-
       fs.mkdirSync(customerControllerDir, { recursive: true });
       fs.mkdirSync(customerRouteDir, { recursive: true });
-      fs.mkdirSync(modelsDir, { recursive: true });
 
-      // Write Controller (.js)
-      const controllerCode = generateControllerCode(file, "customer");
-      const controllerFilePath = path.join(customerControllerDir, `${file.name}Controller.js`);
-      fs.writeFileSync(controllerFilePath, controllerCode, "utf8");
-      generatedPaths.controllerCustomer = controllerFilePath;
+      const customerControllerCode = generateControllerCode(file, "customer");
+      const customerControllerFilePath = path.join(customerControllerDir, `${file.name}Controller.js`);
+      fs.writeFileSync(customerControllerFilePath, customerControllerCode, "utf8");
+      generatedPaths.controllerCustomer = customerControllerFilePath;
 
-      // Write Route (.js)
-      const routeCode = generateRouterCode(file, "customer");
-      const routeFilePath = path.join(customerRouteDir, `${file.name}Routes.js`);
-      fs.writeFileSync(routeFilePath, routeCode, "utf8");
-      generatedPaths.routeCustomer = routeFilePath;
+      // Write Customer Route (.js) - Headless Customer Backend API
+      const customerRouteCode = generateRouterCode(file, "customer");
+      const customerRouteFilePath = path.join(customerRouteDir, `${file.name}Routes.js`);
+      fs.writeFileSync(customerRouteFilePath, customerRouteCode, "utf8");
+      generatedPaths.routeCustomer = customerRouteFilePath;
 
       // Write SQL Model schema reference (.sql)
       const sqlCode = generateSqlSchema(file);
       const sqlFilePath = path.join(modelsDir, `${file.name}.sql`);
       fs.writeFileSync(sqlFilePath, sqlCode, "utf8");
       generatedPaths.modelSql = sqlFilePath;
-    }
 
     // Update the dynamic sidebar component registry
     updateRegistry(targetDir);
@@ -2614,7 +2627,7 @@ export default function ${pascalName}Layout({ children }) {
 
     return res.json({
       success: true,
-      message: `Generated files successfully at ${targetDir} for target ${apiTarget}`,
+      message: `Generated files successfully at ${targetDir}`,
       paths: generatedPaths,
     });
   } catch (err) {

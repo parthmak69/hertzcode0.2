@@ -36,6 +36,7 @@ export function generateExpressController(tableName, columns) {
   }
 
   return `import { dbQuery } from '../config/db.js';
+import { verifyPassword, hashPassword } from '../utils/authHelper.js';
 
 // GET All Records
 export const get${pascalName}s = async (req, res) => {
@@ -179,16 +180,16 @@ export const changePassword = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Account record not found.' });
     }
 
-    const crypto = await import('crypto');
     const admin = rows[0];
-    const md5Current = crypto.default.createHash('md5').update(currentPassword).digest('hex');
-    const isValid = (admin.password === currentPassword || admin.password === md5Current || !admin.password);
+    const storedHash = admin.password || admin.pass_hash;
+    const isValid = verifyPassword(currentPassword, storedHash);
     if (!isValid) {
       return res.status(400).json({ success: false, message: 'Current password does not match.' });
     }
 
-    const md5New = crypto.default.createHash('md5').update(newPassword).digest('hex');
-    await dbQuery('UPDATE \`${tableName}\` SET password = ? WHERE id = ?', [md5New, admin.id]);
+    const newHash = hashPassword(newPassword);
+    const passCol = admin.pass_hash !== undefined ? 'pass_hash' : 'password';
+    await dbQuery(\`UPDATE \\\`\${tableName}\\\` SET \\\`\${passCol}\\\` = ? WHERE \\\`\${pkName}\\\` = ?\`, [newHash, admin['\${pkName}'] || admin.id]);
     return res.json({ success: true, message: 'Password changed successfully.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -204,6 +205,7 @@ export function generateExpressRouter(tableName) {
   const pascalName = toPascalCase(tableName);
 
   return `import express from 'express';
+import { checkAuth } from '../middleware/authMiddleware.js';
 import {
   get${pascalName}s,
   get${pascalName}ById,
@@ -214,6 +216,9 @@ import {
 } from '../controllers/${tableName}Controller.js';
 
 const router = express.Router();
+
+// Enforce authentication on all routes
+router.use(checkAuth);
 
 // File / Image Upload Endpoint
 router.post(['/upload', '/admin/upload'], (req, res) => {

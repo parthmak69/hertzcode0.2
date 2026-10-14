@@ -1,7 +1,7 @@
 import express from 'express';
 import * as orderController from '../controllers/orderController.js';
+import checkAuth from '../middleware/authMiddleware.js';
 
-const checkAuth = (req, res, next) => next();
 const router = express.Router();
 
 router.use(checkAuth);

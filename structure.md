@@ -1,6 +1,12 @@
-# Proposed Multi-Project Code Generation Structure (Hertzcode)
+# Finalized Hertzcode Architecture & Code Generation Structure
 
-This document outlines the architectural changes and file generation distribution plan for the new code generator. It explains how files are generated and where they will go based on the selected API Target.
+Hertzcode generates:
+1. **Node.js / Express MVC Backend**:
+   - **Admin Backend API**: `backend/controllers/admin/` & `backend/routes/admin/` (Accessible at `/api/apiAdmin/[tableName]` and `/api/admin/[tableName]`).
+   - **Customer Backend API (Headless)**: `backend/controllers/customer/` & `backend/routes/customer/` (Accessible at `/api/apiCustomer/[tableName]` and `/api/customer/[tableName]`).
+2. **Next.js Premium Admin Panel UI**:
+   - **Admin Management UI**: `admin-panel/components/[tableName]Crud.jsx` & `admin-panel/app/[tableName]/page.jsx`.
+   - **Note**: No Customer Website UI is generated. The Customer API is headless so any external mobile app or custom consumer frontend can consume `/api/apiCustomer/[tableName]`.
 
 ---
 
@@ -8,105 +14,73 @@ This document outlines the architectural changes and file generation distributio
 
 ```mermaid
 graph TD
-    A[Hertzcode Designer UI] --> B{Choose API Target}
+    A[Hertzcode Designer UI] --> B[Generate Project / Table]
     
-    B -->|Admin Panel| C[Generate Admin UI]
-    B -->|Admin Panel| D[Generate Admin Backend Route]
+    B --> C[Generate Next.js Admin UI Component]
+    B --> D[Generate Express Admin Controller & Route]
+    B --> E[Generate Express Customer API Controller & Route]
+    B --> F[Generate SQL Schema Model]
     
-    B -->|Customer Website| E[Generate Customer UI]
-    B -->|Customer Website| F[Generate Customer Backend Route]
+    C --> G["Write Admin UI to:<br><b>[Root]/admin-panel/components/[name]Crud.jsx</b>"]
     
-    B -->|Both| C
-    B -->|Both| D
-    B -->|Both| E
-    B -->|Both| F
+    D --> H["Write Admin API to:<br><b>[Root]/backend/controllers/admin/[name]Controller.js</b><br><b>[Root]/backend/routes/admin/[name]Routes.js</b>"]
     
-    C --> G["Write UI Component to:<br><b>[Root]/admin-panel/components/[name]Crud.jsx</b>"]
-    D --> H["Write Backend API Route to:<br><b>[Root]/backend/apiAdmin/[name]/route.js</b>"]
+    E --> I["Write Customer API (Headless) to:<br><b>[Root]/backend/controllers/customer/[name]Controller.js</b><br><b>[Root]/backend/routes/customer/[name]Routes.js</b>"]
     
-    E --> I["Write UI Component to:<br><b>[Root]/website/components/[name]Crud.jsx</b>"]
-    F --> J["Write Backend API Route to:<br><b>[Root]/backend/apiCustomer/[name]/route.js</b>"]
+    F --> J["Write SQL Schema to:<br><b>[Root]/backend/models/[name].sql</b>"]
 ```
 
 ---
-
 
 ## 2. Directory Tree Representation
-When you choose a root folder for generation (e.g. `c:\Users\Faizan\Desktop\MyEcommerce`), the generator will create the following layout:
+When you generate a project into a destination folder (e.g. `c:\Users\Faizan\Desktop\MyProject`), Hertzcode bootstraps the following layout:
 
 ```text
-[Root Directory / Desktop Folder]
+[Root Destination Folder]
 ├── backend/
-│   ├── package.json               <-- Shared Node.js/Express config
-│   ├── server.js                  <-- Shared Express/HTTP server setup
+│   ├── package.json               <-- Express & MySQL dependencies
+│   ├── server.js                  <-- Express server with security & auto-reloading
 │   ├── config/
-│   │   ├── db.js                  <-- Centralized Database Connection (Pool)
-│   │   └── common.js              <-- Common helper functions for Customer/Admin
-│   ├── apiCustomer/               <-- Customer Website Endpoints
-│   │   └── [tableName]/
-│   │       └── route.js           <-- Imports DB and common utils
-│   └── apiAdmin/                  <-- Admin Portal Endpoints
-│       └── [tableName]/
-│           └── route.js           <-- Imports DB and common utils
+│   │   └── db.js                  <-- Centralized MySQL connection pool
+│   ├── middleware/
+│   │   ├── authMiddleware.js      <-- JWT verification & role authorization
+│   │   └── uploadMiddleware.js    <-- Whitelisted file uploads with 10MB limits
+│   ├── utils/
+│   │   └── authHelper.js          <-- Salted scrypt password hashing & JWT helpers
+│   ├── controllers/
+│   │   ├── admin/
+│   │   │   └── [tableName]Controller.js  <-- Admin MVC Controller
+│   │   └── customer/
+│   │       └── [tableName]Controller.js  <-- Headless Customer API Controller
+│   ├── routes/
+│   │   ├── admin/
+│   │   │   └── [tableName]Routes.js      <-- Mounted at /api/apiAdmin/[tableName]
+│   │   └── customer/
+│   │       └── [tableName]Routes.js      <-- Mounted at /api/apiCustomer/[tableName]
+│   └── models/
+│       └── [tableName].sql        <-- Generated SQL schema
 │
-├── admin-panel/                   <-- Next.js Admin Panel Project
-│   ├── package.json
-│   ├── components/                <-- Generated Admin CRUD components
-│   │   └── [tableName]Crud.jsx
-│   └── app/                       <-- Next.js Pages/Routing
-│
-└── website/                       <-- Next.js Customer Frontend Project
+└── admin-panel/                   <-- Next.js 14+ Premium Admin Template (Single UI)
     ├── package.json
-    ├── components/                <-- Generated Customer components/views
-    │   └── [tableName]List.jsx
-    └── app/                       <-- Next.js Pages/Routing
+    ├── app/                       <-- Dynamic routing & App Router pages
+    │   ├── login/                 <-- Real JWT login handshake
+    │   └── [tableName]/           <-- Handcrafted or dynamic CRUD pages
+    │       ├── page.jsx
+    │       └── layout.jsx
+    ├── components/                <-- Generated CRUD management screens
+    │   └── [tableName]Crud.jsx
+    ├── config/
+    │   └── menu.js                <-- Dynamically generated sidebar navigation
+    └── registry.js                <-- Auto-updated component registry
 ```
 
 ---
 
-## 3. API Target Split Details
-
-We will add an `apiTarget` option to the builder schema which can be one of:
-* `"admin"` (Generated inside `admin-panel` and `backend/apiAdmin`)
-* `"customer"` (Generated inside `website` and `backend/apiCustomer`)
-* `"both"` (Generated inside both sets of projects)
-
-### A. Backend Generation Path (`backend/`)
-Instead of a single endpoint, the generator will write backend routes based on the target:
-* **Admin APIs**: Generated at `[Root]/backend/apiAdmin/[tableName]/route.js`
-* **Customer APIs**: Generated at `[Root]/backend/apiCustomer/[tableName]/route.js`
-
-### B. Frontend Generation Path (`admin-panel/` and `website/`)
-* **Admin UI (Management Screen)**: Written to `[Root]/admin-panel/components/[tableName]Crud.jsx`. This component handles Full CRUD operations (Add, Edit, List, Delete) and points calls to `/api/apiAdmin/[tableName]`.
-* **Customer UI (Consumer Screen)**: Written to `[Root]/website/components/[tableName]View.jsx` or `[tableName]List.jsx`. This component handles read-only or transactional actions (e.g. Add-to-cart, View lists) and calls `/api/apiCustomer/[tableName]`.
-
----
-
-## 4. Step-by-Step Implementation Roadmap
-
-Here are the major changes we will make to implementation:
-
-### Step 1: Update Schema Builder UI
-Add an "API Target" field in the Builder UI. This dropdown will allow selecting:
-* **Admin Panel (Default)**
-* **Customer Website**
-* **Both (Shared)**
-
-### Step 2: Revamp `crudController.js` logic
-1. Parse the new `apiTarget` parameter from `req.body.file.settings.apiTarget`.
-2. Construct target directories:
-   * `[Root]/backend/apiAdmin`
-   * `[Root]/backend/apiCustomer`
-   * `[Root]/admin-panel/components`
-   * `[Root]/website/components`
-3. Execute conditional file writes:
-   * Write to admin paths if target is `"admin"` or `"both"`.
-   * Write to customer paths if target is `"customer"` or `"both"`.
-
-### Step 3: Boilerplate Initializer (Optional / Recommended)
-If the sub-folders like `admin-panel`, `website`, or `backend` are empty or do not exist, Hertzcode will write a basic template:
-1. **`backend/config/db.js`**: Centralized MySQL connection pool setup so individual routes import the DB client from here instead of recreating connections.
-2. **`backend/config/common.js`**: Shared helper functions (validation, formatters) used by both customer and admin APIs.
-3. **`package.json` / `server.js`**: Set up a generic server wrapper that starts the backend app and handles CORS/routing.
-4. **Next.js config**: Basic template setup for the admin-panel and website applications.
-
+## 3. Key Design Principles
+- **Dual API Generation (Admin + Headless Customer)**:
+  - Admin API endpoints (`/api/apiAdmin/*`) power the Next.js Admin Panel with complete management and audit features.
+  - Headless Customer API endpoints (`/api/apiCustomer/*`) provide clean, lightweight REST APIs for public consumer interactions without requiring an auto-generated website UI.
+- **Root-Cause Security**:
+  - ES Modules architecture with cryptographic JWT signing and salted `crypto.scrypt` password hashing.
+  - Strict upload whitelist and 10MB limit.
+  - Database access middleware with destructive SQL isolation.

@@ -56,10 +56,20 @@ export default function LoginPage() {
             }
 
             if (json.success) {
-                const authData = json.data || {
-                    accessToken: 'admin_token_' + Date.now(),
-                    refreshToken: 'admin_refresh_' + Date.now(),
-                    user: { username: json.username || username, role: json.role || 'admin', name: json.name || username }
+                const accessToken = json.data?.accessToken || json.token || json.accessToken
+                if (!accessToken) {
+                    setError('Authentication failed: Server did not return a valid security token.')
+                    setLoading(false)
+                    return
+                }
+                const authData = {
+                    accessToken,
+                    refreshToken: json.data?.refreshToken || json.refreshToken || accessToken,
+                    user: json.data?.user || {
+                        username: json.username || username,
+                        role: json.role || 'admin',
+                        name: json.name || username
+                    }
                 }
                 saveAuth(authData, rememberMe)
                 router.replace('/dashboard')

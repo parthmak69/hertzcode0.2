@@ -1,8 +1,10 @@
 import express from 'express';
 import * as adminsController from '../../controllers/admin/adminsController.js';
 import uploadParser from '../../middleware/uploadMiddleware.js';
+import checkAuth from '../../middleware/authMiddleware.js';
 
 const router = express.Router();
+router.use(checkAuth);
 
 router.put(['/change-password', '/change_password'], adminsController.changePassword);
 router.post(['/bulk-delete', '/bulk_delete'], adminsController.bulkDeleteAdmins);

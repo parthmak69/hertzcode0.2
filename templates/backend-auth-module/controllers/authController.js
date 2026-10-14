@@ -1,5 +1,5 @@
 import adminModel from '../models/adminModel.js'
-import { verifyPassword, hashPassword, generateToken } from '../utils/authHelper.js'
+import { verifyPassword, hashPassword, generateToken, verifyToken, needsRehash } from '../utils/authHelper.js'
 import { dbQuery } from '../config/db.js'
 
 // In-memory Map to track failed login attempts by key
@@ -82,18 +82,38 @@ const authController = {
             // Reset failed login attempts on successful login
             loginAttempts.delete(key)
 
+            // Transparently upgrade legacy MD5 or plaintext password to modern salted scrypt
+            if (needsRehash(admin.password || admin.pass_hash)) {
+                try {
+                    const modernHash = hashPassword(password)
+                    await adminModel.updateAdminPassword(admin.id, modernHash, admin.id)
+                } catch (rehashErr) {
+                    console.warn('[Auto-Rehash Warning] Failed to upgrade admin password hash:', rehashErr.message)
+                }
+            }
+
             // Generate JWT access token
-            const tokenUser = { id: admin.id, name: admin.name || admin.fname, username: admin.username }
+            const tokenUser = {
+                id: admin.id,
+                name: admin.name || admin.fname,
+                username: admin.username,
+                role: admin.role || 'admin'
+            }
             const accessToken = generateToken(tokenUser)
 
             await dbQuery('SELECT 1', [], admin.id, `Admin session initialized for: ${admin.name || admin.fname} (${admin.username})`)
 
             return res.json({
                 success: true,
+                message: 'Login successful',
+                username: admin.username,
+                name: admin.name || admin.fname,
+                role: admin.role || 'admin',
+                token: accessToken,
                 data: {
                     accessToken,
                     refreshToken: accessToken,
-                    user: { id: admin.id, name: admin.name || admin.fname, username: admin.username }
+                    user: tokenUser
                 }
             })
         } catch (err) {
@@ -170,7 +190,6 @@ const authController = {
     // POST /api/auth/refresh-token
     async refreshToken(req, res) {
         try {
-            const { verifyToken } = require('../utils/authHelper')
             const adminUser = verifyToken(req)
             if (!adminUser) {
                 return res.status(401).json({ success: false, message: 'Invalid or expired token.' })

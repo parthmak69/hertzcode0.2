@@ -50,8 +50,22 @@ app.use((req, res, next) => {
     const boundary = boundaryMatch ? (boundaryMatch[1] || boundaryMatch[2]) : null;
 
     let chunks = [];
-    req.on('data', chunk => { chunks.push(chunk); });
+    let totalBytes = 0;
+    const MAX_UPLOAD_SIZE = 15 * 1024 * 1024; // 15MB upload stream limit
+    let limitExceeded = false;
+
+    req.on('data', chunk => {
+      totalBytes += chunk.length;
+      if (totalBytes > MAX_UPLOAD_SIZE) {
+        limitExceeded = true;
+        req.destroy(); // Abort upload to protect server memory
+        return;
+      }
+      chunks.push(chunk);
+    });
+
     req.on('end', () => {
+      if (limitExceeded) return;
       try {
         const buffer = Buffer.concat(chunks);
         const bodyObj = { ...(req.body || {}) };
@@ -83,6 +97,13 @@ app.use((req, res, next) => {
                 const fieldName = nameMatch[1];
                 if (filenameMatch && filenameMatch[1] && contentBuf.length > 0) {
                   const rawFilename = path.basename(filenameMatch[1]);
+                  const ext = path.extname(rawFilename).toLowerCase();
+                  const ALLOWED_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.ico', '.pdf', '.csv', '.txt', '.doc', '.docx', '.xls', '.xlsx', '.zip'];
+                  if (!ALLOWED_EXTS.includes(ext)) {
+                    console.warn(`[Blocked Upload] Refused upload with unauthorized extension: ${ext}`);
+                    continue;
+                  }
+
                   const uploadsDir = path.resolve('./public/uploads');
                   if (!fs.existsSync(uploadsDir)) {
                     fs.mkdirSync(uploadsDir, { recursive: true });
@@ -505,7 +526,7 @@ export async function loadMvcRoutes() {
             const router = imported.default || imported;
             if (!router) continue;
 
-            const apiPrefix = target === 'admin' ? 'apiAdmin' : 'apiCustomer';
+            const apiPrefix = target === 'admin' ? 'apiAdmin' : (target === 'customer' ? 'apiCustomer' : 'api');
             const singularName = tableName.endsWith('s') ? tableName.slice(0, -1) : tableName;
             const pluralName = tableName.endsWith('s') ? tableName : tableName + 's';
             const aliases = new Set([tableName, singularName, pluralName]);
@@ -565,14 +586,21 @@ export async function loadMvcRoutes() {
             }
 
             aliases.forEach(name => {
-              app.use('/api/' + apiPrefix + '/' + name, router);
-              app.use('/api/admin/' + name, router);
-              app.use('/admin/' + name, router);
-              if (name !== 'admin' && name !== 'customer') {
+              if (target === 'customer') {
+                app.use('/api/apiCustomer/' + name, router);
+                app.use('/api/customer/' + name, router);
+                app.use('/customer/' + name, router);
                 app.use('/api/' + name, router);
+              } else {
+                app.use('/api/apiAdmin/' + name, router);
+                app.use('/api/admin/' + name, router);
+                app.use('/admin/' + name, router);
+                if (name !== 'admin' && name !== 'customer') {
+                  app.use('/api/' + name, router);
+                }
               }
             });
-            console.log('[MVC ROUTE] Registered ' + file + ' (aliases: ' + Array.from(aliases).join(', ') + ')');
+            console.log('[MVC ROUTE] Registered ' + file + ' (' + target + ' aliases: ' + Array.from(aliases).join(', ') + ')');
           } catch (err) {
             console.error('[MVC ROUTE ERROR] Failed to load ' + file + ':', err.message);
           }

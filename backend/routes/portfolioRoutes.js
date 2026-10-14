@@ -5,8 +5,7 @@ const require = createRequire(import.meta.url);
 import * as portfolioController from '../controllers/portfolioController.js';
 
 import uploadParser from '../middleware/uploadMiddleware.js';
-
-const checkAuth = (req, res, next) => next();
+import checkAuth from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
