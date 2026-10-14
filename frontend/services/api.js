@@ -13,10 +13,12 @@ export class HttpError extends Error {
 const request = async (endpoint, options = {}) => {
   const url = `${BASE_URL}${endpoint}`;
   const username = typeof window !== "undefined" ? localStorage.getItem("currentUser") || "" : "";
+  const token = typeof window !== "undefined" ? (localStorage.getItem("authToken") || localStorage.getItem("token") || "") : "";
 
   const headers = {
     "Content-Type": "application/json",
     ...(username ? { "x-user-username": username } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
 

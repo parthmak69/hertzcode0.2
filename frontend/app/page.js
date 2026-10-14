@@ -77,6 +77,10 @@ export default function LoginPage() {
         localStorage.setItem("currentUser", data.username || email);
         localStorage.setItem("currentUserName", data.name || "");
         localStorage.setItem("currentUserRole", data.role || "user");
+        const token = data.token || data.accessToken || data.data?.accessToken || "";
+        if (token) {
+          localStorage.setItem("authToken", token);
+        }
 
         setAuthorized(true);
         setCurrentUser(data.username || email);

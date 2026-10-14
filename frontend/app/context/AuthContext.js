@@ -35,6 +35,8 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("currentUser");
     localStorage.removeItem("currentUserName");
     localStorage.removeItem("currentUserRole");
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("token");
     localStorage.removeItem("rememberedEmail");
     localStorage.removeItem("rememberMe");
     

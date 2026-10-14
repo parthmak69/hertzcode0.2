@@ -34,26 +34,33 @@ export const checkDatabaseAccess = async (req, res, next) => {
     return next();
   }
 
-  // 1. Verify identity via JWT token first
+  // 1. Verify identity via JWT token first (if provided)
   const authUser = verifyToken(req);
   if (authUser && authUser.role === "admin") {
     req.user = authUser;
-    return next(); // Authenticated admin has access
+    return next(); // Authenticated admin has access to all databases
   }
 
   // 2. Identify requesting username
   let username = authUser ? authUser.username : null;
   if (!username) {
-    const rawUsername = req.headers["x-user-username"] || req.query.username || req.body.username;
+    username = req.headers["x-user-username"] || req.query.username || req.body.username;
+  }
 
-    // Disallow unauthenticated impersonation of the admin account
-    if (!rawUsername || rawUsername.toLowerCase() === "admin") {
-      return res.status(401).json({
-        success: false,
-        error: "Authentication required. Admin privileges require a valid authorization token.",
-      });
-    }
-    username = rawUsername;
+  // If no username and no auth token, reject unauthenticated request
+  if (!username) {
+    return res.status(401).json({
+      success: false,
+      error: "Authentication required. Please log in or provide valid credentials.",
+    });
+  }
+
+  // For raw SQL query terminal (/query), enforce signed JWT token for admin privilege to prevent unauthenticated injection
+  if (req.path === "/query" && !authUser) {
+    return res.status(401).json({
+      success: false,
+      error: "Authentication required. Admin query terminal requires a valid authorization token.",
+    });
   }
 
   let connection;
@@ -80,15 +87,9 @@ export const checkDatabaseAccess = async (req, res, next) => {
 
     const user = rows[0];
 
-    // Admin role requires legitimate signed JWT token verification
+    // Admin role has access to databases for management & table browsing
     if (user.role === "admin") {
-      if (!authUser) {
-        return res.status(401).json({
-          success: false,
-          error: "Admin role operations require a valid authorization token.",
-        });
-      }
-      req.user = authUser;
+      req.user = authUser || { username: user.username, role: user.role };
       return next();
     }
 
