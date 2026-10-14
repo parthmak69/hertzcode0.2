@@ -6,6 +6,7 @@ import axios from "axios";
 import Link from "next/link";
 import { useToast } from "../context/ToastContext";
 import { useAuth } from "../context/AuthContext";
+import { projectService } from "../../services/projectService";
 
 const DatabaseIcon = ({ active }) => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: active ? "#ffffff" : "currentColor" }}>
@@ -84,17 +85,20 @@ export default function DashboardLayout({ children }) {
   // Global projects database sync on mount
   useEffect(() => {
     if (authorized && currentUser) {
-      axios.get(`/api/crud/projects?user=${currentUser}&role=${currentUserRole}`)
-        .then(response => {
-          const data = response.data;
-          if (data.success && Array.isArray(data.projects)) {
-            const userKey = currentUserRole === 'admin' ? 'admin' : currentUser;
-            localStorage.setItem(`crudProjects_${userKey}`, JSON.stringify(data.projects));
-            // Trigger state reload event in active page views
-            window.dispatchEvent(new Event('projects_synced'));
-          }
+      projectService
+        .fetchProjectsFromDb(currentUser, currentUserRole, true)
+        .then(() => {
+          try {
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+              const key = localStorage.key(i);
+              if (key && (key.startsWith("crudProjects") || key.startsWith("crudProjects_"))) {
+                localStorage.removeItem(key);
+              }
+            }
+          } catch (e) {}
+          window.dispatchEvent(new Event("projects_synced"));
         })
-        .catch(err => console.error("Database projects sync failed:", err));
+        .catch((err) => console.error("Database projects sync failed:", err));
     }
   }, [authorized, currentUser, currentUserRole]);
   const toggleTheme = () => {

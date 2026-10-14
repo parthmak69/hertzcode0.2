@@ -2689,10 +2689,11 @@ export const getSchemas = async (req, res) => {
 // GET /api/crud/projects
 export const getProjects = async (req, res) => {
   try {
-    const user = req.query.user || req.headers["x-user-name"] || "admin";
+    const user = req.query.user || req.headers["x-user-username"] || req.headers["x-user-name"] || "admin";
     const role = req.query.role || req.headers["x-user-role"] || "admin";
+    const includeDeleted = req.query.includeDeleted !== "false";
 
-    const projects = await fetchProjects(user, role);
+    const projects = await fetchProjects(user, role, includeDeleted);
     return res.json({ success: true, projects });
   } catch (err) {
     console.error("Failed to load projects from DB:", err);
@@ -2708,7 +2709,10 @@ export const saveProjects = async (req, res) => {
       return res.status(400).json({ success: false, error: "Projects array is required." });
     }
 
-    await saveProjectsList(projects);
+    const user = req.query.user || req.headers["x-user-username"] || req.headers["x-user-name"] || "admin";
+    const role = req.query.role || req.headers["x-user-role"] || "admin";
+
+    await saveProjectsList(projects, user, role);
     return res.json({ success: true, message: "Projects saved successfully." });
   } catch (err) {
     console.error("Failed to save projects to DB:", err);

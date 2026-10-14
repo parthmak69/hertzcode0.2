@@ -4,6 +4,8 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useToast } from "../../../../../context/ToastContext";
+import { getProjectsForUser } from "../../../../../utils/projectStorage";
+import { projectService } from "../../../../../../services/projectService";
 
 export default function PortalLoginPage() {
   const { showToast } = useToast();
@@ -20,24 +22,21 @@ export default function PortalLoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
 
   useEffect(() => {
-    let foundProj = null;
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && (key.startsWith("crudProjects_") || key === "crudProjects")) {
-        try {
-          const list = JSON.parse(localStorage.getItem(key)) || [];
-          const found = list.find((p) => p.id === projectId);
-          if (found) {
-            foundProj = found;
-            break;
+    const user = localStorage.getItem("currentUser") || "admin";
+    const role = localStorage.getItem("currentUserRole") || "admin";
+    const projs = getProjectsForUser(user, role);
+    const found = projs.find((p) => p.id === projectId);
+    if (found) {
+      setProject(found);
+    } else {
+      projectService.fetchProjectsFromDb(user, role, true).then((list) => {
+        if (list) {
+          const fromDb = list.find((p) => p.id === projectId);
+          if (fromDb) {
+            setProject(fromDb);
           }
-        } catch (e) {
-          console.error("Failed to parse " + key, e);
         }
-      }
-    }
-    if (foundProj) {
-      setProject(foundProj);
+      });
     }
   }, [projectId]);
 
